@@ -1,0 +1,210 @@
+/* ========================================
+   DASHBOARD CSS - Navigation Bar Layout
+   ======================================== */
+
+/* Main Dashboard Container */
+.dashboard-main {
+  min-height: 100vh;
+  background-color: var(--background);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ========== Navigation Bar ========== */
+.dashboard-nav {
+  background-color: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  padding: 0 var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+/* Left Side - Logo and Toggle */
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+}
+
+.nav-logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+/* Hamburger Toggle Button */
+.nav-toggle {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-md);
+  transition: var(--transition);
+}
+
+.nav-toggle:hover {
+  background-color: var(--surface-hover);
+}
+
+/* Navigation Menu */
+.nav-menu {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-menu li {
+  margin: 0;
+  padding: 0;
+}
+
+/* Navigation Items */
+.nav-item {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.nav-item:hover {
+  background-color: var(--surface-hover);
+  color: var(--primary);
+}
+
+.nav-item.active {
+  background-color: var(--primary-light);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Logout Button Styling */
+.nav-logout {
+  color: var(--danger);
+}
+
+.nav-logout:hover {
+  background-color: var(--danger-light);
+  color: var(--danger-hover);
+}
+
+/* Desktop Logout - Always Visible on Desktop */
+.desktop-logout {
+  display: inline-flex;
+}
+
+/* Mobile Logout - Hidden on Desktop */
+.mobile-logout {
+  display: none;
+}
+
+/* ========== Dashboard Content Area ========== */
+.dashboard-content {
+  flex: 1;
+  padding: var(--spacing-xl);
+  overflow-y: auto;
+}
+
+/* ========== Responsive Design ========== */
+@media (max-width: 768px) {
+  .dashboard-nav {
+    padding: 0 var(--spacing-md);
+  }
+
+  /* Show hamburger toggle on mobile */
+  .nav-toggle {
+    display: block;
+  }
+
+  /* Hide desktop logout on mobile */
+  .desktop-logout {
+    display: none;
+  }
+
+  /* Show mobile logout in menu */
+  .mobile-logout {
+    display: block;
+  }
+
+  /* Mobile Menu Styling */
+  .nav-menu {
+    position: fixed;
+    top: 64px;
+    left: -100%;
+    width: 280px;
+    height: calc(100vh - 64px);
+    background-color: var(--surface);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: var(--spacing-md);
+    box-shadow: var(--shadow-lg);
+    transition: left 0.3s ease-in-out;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+  }
+
+  .nav-menu.open {
+    left: 0;
+  }
+
+  .nav-menu li {
+    width: 100%;
+  }
+
+  .nav-item {
+    width: 100%;
+    padding: var(--spacing-md);
+    justify-content: flex-start;
+    font-size: 1rem;
+  }
+
+  /* Mobile Menu Overlay */
+  .nav-menu.open::before {
+    content: '';
+    position: fixed;
+    top: 64px;
+    left: 280px;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: -1;
+  }
+
+  .dashboard-content {
+    padding: var(--spacing-md);
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .dashboard-nav {
+    padding: 0 var(--spacing-md);
+  }
+
+  .nav-item {
+    padding: var(--spacing-sm);
+    font-size: 0.8125rem;
+  }
+
+  .dashboard-content {
+    padding: var(--spacing-lg);
+  }
+}

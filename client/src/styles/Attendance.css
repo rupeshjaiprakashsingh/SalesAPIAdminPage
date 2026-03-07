@@ -1,0 +1,207 @@
+/* ========================================
+   ATTENDANCE PAGE CSS
+   ======================================== */
+
+/* Main Container */
+.attendance-container {
+  padding: var(--spacing-xl);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* Content Area */
+.attendance-content {
+  background: var(--surface);
+  padding: var(--spacing-xl);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border);
+}
+
+.attendance-content h2 {
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.attendance-content p {
+  margin: 0 0 var(--spacing-lg) 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+/* Form Styling */
+.attendance-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.attendance-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.attendance-form label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.attendance-form input,
+.attendance-form select,
+.attendance-form textarea {
+  width: 100%;
+  padding: var(--spacing-md);
+  font-size: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  color: var(--text-primary);
+  transition: var(--transition);
+  font-family: inherit;
+}
+
+.attendance-form input:focus,
+.attendance-form select:focus,
+.attendance-form textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.attendance-form input[readonly],
+.attendance-form textarea[readonly] {
+  background-color: var(--background);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+.attendance-form textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+/* Button Styling */
+.attendance-buttons {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.attendance-btn {
+  padding: var(--spacing-md) var(--spacing-xl);
+  font-size: 1rem;
+  font-weight: 600;
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+  min-width: 200px;
+}
+
+.attendance-btn:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.attendance-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.attendance-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--text-disabled);
+}
+
+/* Status Indicator */
+.status-indicator {
+  text-align: center;
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+}
+
+.status-in {
+  background-color: var(--success-light);
+  color: var(--success-hover);
+}
+
+.status-out {
+  background-color: var(--danger-light);
+  color: var(--danger-hover);
+}
+
+/* Location Info */
+.location-info {
+  background-color: var(--background);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-lg);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.location-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.location-status.valid {
+  color: var(--success);
+}
+
+.location-status.invalid {
+  color: var(--danger);
+}
+
+/* Map Container */
+.map-container {
+  width: 100%;
+  height: 300px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: var(--spacing-lg);
+  border: 1px solid var(--border);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .attendance-container {
+    padding: var(--spacing-md);
+  }
+
+  .attendance-content {
+    padding: var(--spacing-lg);
+  }
+
+  .attendance-content h2 {
+    font-size: 1.25rem;
+  }
+
+  .attendance-btn {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .map-container {
+    height: 250px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .attendance-container {
+    padding: var(--spacing-lg);
+  }
+}

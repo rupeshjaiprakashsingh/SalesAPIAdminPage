@@ -1,0 +1,12 @@
+.leaflet-container {
+  width: 100% !important;
+  height: 600px !important;
+  border-radius: 12px;
+}
+
+.map-wrapper {
+  width: 100%;
+  height: 600px;
+  min-height: 600px;
+  position: relative;
+}

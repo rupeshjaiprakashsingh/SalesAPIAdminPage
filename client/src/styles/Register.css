@@ -1,0 +1,268 @@
+/* =========================================================
+   MAIN LAYOUT (DESKTOP)
+   ========================================================= */
+.register-main {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* LEFT SIDE */
+.register-left {
+  flex: 1;
+  background-color: #E9E9E9;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.register-left img {
+  width: 320px;
+}
+
+/* RIGHT SIDE */
+.register-right {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.register-right-container {
+  width: 80%;
+  max-width: 420px;
+}
+
+/* LOGO */
+.register-logo {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.register-logo img {
+  width: 50px;
+}
+
+/* CENTER TEXT */
+.register-center {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.register-center h2 {
+  font-size: 28px;
+  margin-bottom: 5px;
+}
+
+.register-center p {
+  font-size: 16px;
+  margin-bottom: 20px;
+}
+
+/* INPUTS */
+form input[type="email"],
+form input[type="password"],
+form input[type="text"] {
+  width: 100%;
+  padding: 12px;
+  margin: 6px 0;
+  border: 0;
+  border-bottom: 1px solid #999;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+form input:focus {
+  border-bottom: 1px solid #000;
+}
+
+/* PASSWORD FIELD */
+.pass-input-div {
+  position: relative;
+}
+
+.pass-input-div svg {
+  position: absolute;
+  right: 10px;
+  bottom: 12px;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+/* BUTTONS */
+.register-center-buttons {
+  margin-top: 25px;
+  display: flex;
+  flex-direction: column;
+  row-gap: 12px;
+}
+
+.register-center-buttons button {
+  width: 100%;
+  padding: 14px;
+  border-radius: 30px;
+  font-size: 15px;
+  cursor: pointer;
+  font-weight: 600;
+  border: none;
+}
+
+.register-center-buttons button:nth-child(1) {
+  background: #000;
+  color: #fff;
+}
+
+.register-center-buttons button:nth-child(1):hover {
+  background: #fff;
+  color: #000;
+  border: 2px solid #000;
+}
+
+.register-center-buttons button:nth-child(2) {
+  background: #F0F0F0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.register-center-buttons button:nth-child(2) img {
+  width: 26px;
+}
+
+.register-center-buttons button:nth-child(2):hover {
+  background: #dcdcdc;
+}
+
+/* FOOTER */
+.login-bottom-p {
+  margin-top: 25px;
+  text-align: center;
+  font-size: 15px;
+}
+
+/* ERRORS */
+.input-error {
+  border-bottom: 2px solid red !important;
+}
+
+.error-text {
+  color: red;
+  font-size: 12px;
+  text-align: left;
+  margin-top: -2px;
+  margin-bottom: 4px;
+}
+
+/* REMOVE DEFAULT EXTRA SPACING */
+input {
+  margin-bottom: 0 !important;
+}
+
+
+/* =========================================================
+   RESPONSIVE DESIGN STARTS HERE
+   ========================================================= */
+
+/* ----------- Tablet View (max-width 1024px) ------------- */
+@media (max-width: 1024px) {
+  .register-center h2 {
+    font-size: 26px;
+  }
+
+  .register-center p {
+    font-size: 15px;
+  }
+
+  .register-left img {
+    width: 260px;
+  }
+}
+
+/* ----------- Large Mobile (max-width 768px) ------------- */
+@media (max-width: 768px) {
+  .register-main {
+    flex-direction: column;
+  }
+
+  .register-left {
+    height: 200px;
+  }
+
+  .register-left img {
+    width: 200px;
+  }
+
+  .register-right {
+    padding: 20px 0;
+  }
+
+  .register-right-container {
+    width: 90%;
+  }
+}
+
+/* ----------- Mobile (max-width 600px) ------------------- */
+@media (max-width: 600px) {
+  .register-left {
+    display: none; /* Hide image section */
+  }
+
+  .register-main {
+    justify-content: center;
+    align-items: center;
+  }
+
+  .register-right {
+    flex: unset;
+    width: 100%;
+  }
+
+  .register-right-container {
+    width: 92%;
+  }
+
+  .register-center h2 {
+    font-size: 24px;
+  }
+
+  .register-center p {
+    font-size: 14px;
+  }
+
+  form input {
+    padding: 10px;
+  }
+
+  .register-center-buttons button {
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .login-bottom-p {
+    font-size: 13px;
+  }
+}
+
+/* ----------- Small Mobile (max-width 400px) ------------- */
+@media (max-width: 400px) {
+  .register-center h2 {
+    font-size: 22px;
+  }
+
+  .register-center p {
+    font-size: 13px;
+  }
+
+  .register-logo img {
+    width: 40px;
+  }
+
+  .register-center-buttons button {
+    padding: 10px;
+    font-size: 13px;
+  }
+
+  form input {
+    padding: 8px;
+  }
+}
