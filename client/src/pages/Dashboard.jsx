@@ -1,40 +1,62 @@
 import React, { useEffect, useState } from "react";
 import "../styles/Dashboard.css";
-import { Link, useNavigate, Outlet } from "react-router-dom";
+import { Link, useNavigate, Outlet, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import axios from "axios";
 
+const NAV_ITEMS_COMMON = [
+  { to: "/dashboard", label: "Dashboard", icon: "ri-dashboard-3-line", exact: true },
+  { to: "/dashboard/attendance", label: "Mark Attendance", icon: "ri-map-pin-time-line" },
+  { to: "/dashboard/attendance-list", label: "Attendance List", icon: "ri-list-check-3" },
+  { to: "/dashboard/profile", label: "My Profile", icon: "ri-user-3-line" },
+];
+
+const NAV_ITEMS_ADMIN = [
+  { to: "/dashboard/reports", label: "Reports", icon: "ri-bar-chart-2-line" },
+  { to: "/dashboard/users", label: "User Management", icon: "ri-team-line" },
+  { to: "/dashboard/enquiries", label: "Enquiries", icon: "ri-mail-send-line" },
+  { to: "/dashboard/live-tracking", label: "Live Tracking", icon: "ri-map-2-line" },
+  { to: "/dashboard/timeline-report", label: "Timeline Report", icon: "ri-time-line" },
+  { to: "/dashboard/calendar-report", label: "Calendar Report", icon: "ri-calendar-event-line" },
+];
+
 const Dashboard = () => {
-  const [token, setToken] = useState(
+  const [token] = useState(
     JSON.parse(localStorage.getItem("auth")) || ""
   );
-  const [data, setData] = useState({});
   const [menuOpen, setMenuOpen] = useState(false);
   const [role, setRole] = useState("user");
+  const [userName, setUserName] = useState("Staff");
+  const [currentTime, setCurrentTime] = useState("");
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTime(now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const fetchDashboardData = async () => {
     try {
-      const response = await axios.get("/api/v1/dashboard", {
+      await axios.get("/api/v1/dashboard", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setData({
-        msg: response.data.msg,
-        luckyNumber: response.data.secret,
-      });
-
-      // Decode role from token (simple base64 decode of payload)
       if (token) {
         try {
-          const payload = JSON.parse(atob(token.split('.')[1]));
+          const payload = JSON.parse(atob(token.split(".")[1]));
           setRole(payload.role || "user");
+          setUserName(payload.name || payload.username || "Staff");
         } catch (e) {
           console.error("Error decoding token", e);
         }
       }
-
     } catch (error) {
       toast.error(error.message);
       localStorage.removeItem("auth");
@@ -51,152 +73,154 @@ const Dashboard = () => {
     }
   }, [token, navigate]);
 
+  const isActive = (to, exact = false) => {
+    if (exact) return location.pathname === to;
+    return location.pathname.startsWith(to) && to !== "/dashboard";
+  };
+
+  const greeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 17) return "Good Afternoon";
+    return "Good Evening";
+  };
+
+  const pageTitle = () => {
+    const allItems = [...NAV_ITEMS_COMMON, ...NAV_ITEMS_ADMIN];
+    const found = allItems.find(item =>
+      item.exact
+        ? location.pathname === item.to
+        : location.pathname.startsWith(item.to) && item.to !== "/dashboard"
+    );
+    return found ? found.label : "Dashboard";
+  };
+
   return (
     <div className="dashboard-main">
-      {/* NAVIGATION */}
-      <nav className="dashboard-nav">
-        {/* LEFT side + hamburger */}
-        <div className="nav-left">
-          <div className="nav-logo">Attendance</div>
-
-          {/* Mobile Toggle */}
-          <button
-            className="nav-toggle"
-            onClick={() => setMenuOpen(!menuOpen)}
-          >
-            ☰
-          </button>
+      {/* SIDEBAR */}
+      <aside className={`dashboard-sidebar ${menuOpen ? "open" : ""}`}>
+        {/* Logo */}
+        <div className="sidebar-logo">
+          <div className="sidebar-logo-icon">
+            <i className="ri-pulse-line"></i>
+          </div>
+          <div className="sidebar-logo-text">
+            <span className="sidebar-app-name">SalesAdmin</span>
+            <span className="sidebar-app-tagline">Staff Tracking</span>
+          </div>
         </div>
 
-        {/* MENU ITEMS */}
-        <ul className={`nav-menu ${menuOpen ? "open" : ""}`}>
-          <li>
-            <Link
-              to="/dashboard"
-              className="nav-item"
-              onClick={() => setMenuOpen(false)}
-            >
-              Home
-            </Link>
-          </li>
-
-          <li>
-            <Link
-              to="/dashboard/attendance"
-              className="nav-item"
-              onClick={() => setMenuOpen(false)}
-            >
-              Attendance
-            </Link>
-          </li>
-
-          <li>
-            <Link
-              to="/dashboard/attendance-list"
-              className="nav-item"
-              onClick={() => setMenuOpen(false)}
-            >
-              {role === "admin" ? "Attendance List" : "My Attendance"}
-            </Link>
-          </li>
+        {/* Navigation */}
+        <nav className="sidebar-nav">
+          <div className="sidebar-section-label">Main</div>
+          <ul>
+            {NAV_ITEMS_COMMON.map((item) => (
+              <li key={item.to}>
+                <Link
+                  to={item.to}
+                  className={`nav-item ${
+                    item.exact
+                      ? location.pathname === item.to ? "active" : ""
+                      : location.pathname.startsWith(item.to) && item.to !== "/dashboard" ? "active" : ""
+                  }`}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <i className={item.icon}></i>
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
 
           {role === "admin" && (
             <>
-              <li>
-                <Link
-                  to="/dashboard/reports"
-                  className="nav-item"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Reports
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  to="/dashboard/users"
-                  className="nav-item"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Users
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  to="/dashboard/enquiries"
-                  className="nav-item"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Enquiries
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  to="/dashboard/live-tracking"
-                  className="nav-item"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Live Map
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  to="/dashboard/timeline-report"
-                  className="nav-item"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Timeline Report
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  to="/dashboard/calendar-report"
-                  className="nav-item"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Calendar Report
-                </Link>
-              </li>
+              <div className="sidebar-section-label">Admin Tools</div>
+              <ul>
+                {NAV_ITEMS_ADMIN.map((item) => (
+                  <li key={item.to}>
+                    <Link
+                      to={item.to}
+                      className={`nav-item ${location.pathname.startsWith(item.to) ? "active" : ""}`}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <i className={item.icon}></i>
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </>
           )}
 
-          <li>
-            <Link
-              to="/dashboard/profile"
-              className="nav-item"
-              onClick={() => setMenuOpen(false)}
-            >
-              Profile
-            </Link>
-          </li>
+          <div className="sidebar-section-label">Account</div>
+          <ul>
+            <li>
+              <Link
+                to="/logout"
+                className="nav-item nav-logout"
+                onClick={() => setMenuOpen(false)}
+              >
+                <i className="ri-logout-box-r-line"></i>
+                Sign Out
+              </Link>
+            </li>
+          </ul>
+        </nav>
 
-          {/* Mobile Logout */}
-          <li className="mobile-logout">
-            <Link
-              to="/logout"
-              className="nav-item nav-logout"
-              onClick={() => setMenuOpen(false)}
-            >
-              Logout
-            </Link>
-          </li>
-        </ul>
+        {/* User Card */}
+        <div className="sidebar-footer">
+          <div className="sidebar-user-card">
+            <div className="sidebar-user-avatar">
+              {userName?.charAt(0)?.toUpperCase() || "S"}
+            </div>
+            <div className="sidebar-user-info">
+              <div className="sidebar-user-name">{userName}</div>
+              <div className="sidebar-user-role">{role}</div>
+            </div>
+          </div>
+        </div>
+      </aside>
 
-        {/* Desktop Logout */}
-        <Link to="/logout" className="nav-item nav-logout desktop-logout">
-          Logout
-        </Link>
-      </nav>
+      {/* Mobile Overlay */}
+      {menuOpen && (
+        <div
+          className="sidebar-overlay show"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
 
-      {/* Render nested children */}
-      <div className="dashboard-content">
+      {/* Mobile Toggle */}
+      <button
+        className="sidebar-toggle"
+        onClick={() => setMenuOpen(!menuOpen)}
+        aria-label="Toggle sidebar"
+      >
+        <i className={menuOpen ? "ri-close-line" : "ri-menu-2-line"}></i>
+      </button>
+
+      {/* TOP BAR */}
+      <header className="dashboard-topbar">
+        <div className="topbar-left">
+          <span className="topbar-greeting">{greeting()}, {userName} 👋</span>
+          <span className="topbar-title">{pageTitle()}</span>
+        </div>
+        <div className="topbar-right">
+          <div className="topbar-time">{currentTime}</div>
+          <button className="topbar-icon-btn topbar-badge" title="Notifications">
+            <i className="ri-notification-3-line"></i>
+            <span className="topbar-badge-dot"></span>
+          </button>
+          <button className="topbar-icon-btn" title="Settings">
+            <i className="ri-settings-4-line"></i>
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="dashboard-content">
         <Outlet />
-      </div>
-    </div >
+      </main>
+    </div>
   );
 };
 

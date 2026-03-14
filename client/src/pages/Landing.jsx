@@ -1,22 +1,26 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import "../styles/Landing.css";
-import { FaBuilding, FaShoppingCart, FaEnvelope, FaLaptopCode } from "react-icons/fa";
 
 const Landing = () => {
   return (
     <div className="landing-container">
-      {/* Navigation Bar */}
+      {/* Navigation */}
       <nav className="landing-nav">
         <div className="nav-logo">
-          <span>Attendance App</span>
+          <div className="nav-logo-icon">
+            <i className="ri-pulse-line"></i>
+          </div>
+          <div className="nav-logo-text">
+            Sales<span>Admin</span>
+          </div>
         </div>
         <div className="nav-buttons">
-          <Link to="/login" className="btn btn-outline">
-            Login
+          <Link to="/login" className="btn-outline">
+            Sign In
           </Link>
-          <Link to="/register" className="btn btn-primary">
-            Register
+          <Link to="/register" className="btn btn-hero btn-hero-primary" style={{textDecoration:'none'}}>
+            Get Started
           </Link>
         </div>
       </nav>
@@ -24,78 +28,120 @@ const Landing = () => {
       {/* Hero Section */}
       <header className="hero-section">
         <div className="hero-content">
+          <div className="hero-badge">
+            <span className="hero-badge-dot"></span>
+            Real-time Staff Tracking Platform
+          </div>
+
           <h1 className="hero-title">
-            Streamline Your Workforce Management
+            The Smarter Way to<br />
+            Manage <span className="highlight">Your Sales Team</span>
           </h1>
+
           <p className="hero-subtitle">
-            A comprehensive solution for attendance tracking, reporting, and employee management.
-            Simple, efficient, and secure.
+            Powerful attendance tracking, live GPS monitoring, and in-depth reports — all in one professional platform built for modern sales teams.
           </p>
-          <Link to="/register" className="btn btn-primary" style={{ fontSize: '18px', padding: '14px 32px' }}>
-            Get Started Now
-          </Link>
+
+          <div className="hero-cta">
+            <Link to="/register" className="btn-hero btn-hero-primary">
+              <i className="ri-rocket-line"></i>
+              Start Free Today
+            </Link>
+            <Link to="/login" className="btn-hero btn-hero-secondary" style={{border:'none'}}>
+              <i className="ri-play-circle-line"></i>
+              Sign In
+            </Link>
+          </div>
         </div>
       </header>
 
-      {/* Services Section */}
-      <section className="services-section">
-        <h2 className="section-title">Our Services</h2>
-        <p className="section-subtitle">Comprehensive software solutions for your business needs</p>
+      {/* Stats Bar */}
+      <div className="stats-bar">
+        <div className="stats-bar-item">
+          <div className="stats-bar-num">10<span>K+</span></div>
+          <div className="stats-bar-label">Staff Tracked</div>
+        </div>
+        <div className="stats-bar-item">
+          <div className="stats-bar-num">99<span>.9%</span></div>
+          <div className="stats-bar-label">Uptime</div>
+        </div>
+        <div className="stats-bar-item">
+          <div className="stats-bar-num">500<span>+</span></div>
+          <div className="stats-bar-label">Companies</div>
+        </div>
+        <div className="stats-bar-item">
+          <div className="stats-bar-num">4.8<span>★</span></div>
+          <div className="stats-bar-label">Avg Rating</div>
+        </div>
+      </div>
 
-        <div className="services-grid">
-          {/* Service 1 */}
-          <div className="service-card">
-            <div className="service-icon">
-              <FaBuilding />
+      {/* Features Section */}
+      <section className="features-section">
+        <div className="section-header">
+          <span className="section-eyebrow">Why SalesAdmin?</span>
+          <h2 className="section-title">Everything You Need to<br />Run Your Team Efficiently</h2>
+          <p className="section-subtitle">
+            From attendance to live tracking — all the tools your managers need in a single, beautiful dashboard.
+          </p>
+        </div>
+
+        <div className="features-grid">
+          <div className="feature-card">
+            <div className="feature-icon">
+              <i className="ri-map-pin-time-line"></i>
             </div>
-            <h3>Enterprise Software</h3>
-            <p>
-              Scalable and robust software solutions designed to meet the complex needs of large organizations.
-              Streamline operations and boost productivity.
-            </p>
+            <h3>Smart Attendance</h3>
+            <p>GPS-tagged check-ins and check-outs ensure accurate, tamper-proof attendance records for your entire team.</p>
           </div>
 
-          {/* Service 2 */}
-          <div className="service-card">
-            <div className="service-icon">
-              <FaShoppingCart />
+          <div className="feature-card">
+            <div className="feature-icon">
+              <i className="ri-map-2-line"></i>
             </div>
-            <h3>E-commerce Solutions</h3>
-            <p>
-              End-to-end e-commerce platforms that drive sales. From inventory management to
-              secure payment gateways and user-friendly storefronts.
-            </p>
+            <h3>Live GPS Tracking</h3>
+            <p>Monitor your sales staff in real-time on an interactive map. Know exactly where your team is at any moment.</p>
           </div>
 
-          {/* Service 3 */}
-          <div className="service-card">
-            <div className="service-icon">
-              <FaEnvelope />
+          <div className="feature-card">
+            <div className="feature-icon">
+              <i className="ri-bar-chart-2-line"></i>
             </div>
-            <h3>Email Services</h3>
-            <p>
-              Reliable and secure business email hosting, marketing automation, and
-              transactional email services to keep you connected.
-            </p>
+            <h3>Advanced Reports</h3>
+            <p>Generate detailed attendance and performance reports. Export data as PDF or Excel for payroll and compliance.</p>
           </div>
 
-          {/* Service 4 */}
-          <div className="service-card">
-            <div className="service-icon">
-              <FaLaptopCode />
+          <div className="feature-card">
+            <div className="feature-icon">
+              <i className="ri-team-line"></i>
             </div>
-            <h3>All IT Services</h3>
-            <p>
-              From custom web development to cloud infrastructure and technical support.
-              We provide a full spectrum of IT services to grow your business.
-            </p>
+            <h3>User Management</h3>
+            <p>Add, edit, and manage your entire sales team from one place. Role-based access keeps your data secure.</p>
+          </div>
+
+          <div className="feature-card">
+            <div className="feature-icon">
+              <i className="ri-calendar-event-line"></i>
+            </div>
+            <h3>Calendar View</h3>
+            <p>Visualize attendance data on a monthly calendar for quick insights into present, absent, and leave days.</p>
+          </div>
+
+          <div className="feature-card">
+            <div className="feature-icon">
+              <i className="ri-notification-3-line"></i>
+            </div>
+            <h3>Real-Time Alerts</h3>
+            <p>Instant notifications when staff check-in or check-out. Stay informed with desktop and in-app alerts.</p>
           </div>
         </div>
       </section>
 
       {/* Footer */}
       <footer className="landing-footer">
-        <p>&copy; {new Date().getFullYear()} Attendance App. All rights reserved.</p>
+        <p>
+          &copy; {new Date().getFullYear()} <span className="footer-brand">SalesAdmin</span>. 
+          Professional Staff Tracking & Management. All rights reserved.
+        </p>
       </footer>
     </div>
   );

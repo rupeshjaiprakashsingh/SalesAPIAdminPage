@@ -20,6 +20,14 @@ const { scheduleDailyReport } = require("./utils/cronJobs");
 app.use(express.json());
 app.use(cors());
 
+// Keep-alive / health check (for external ping every ~14 min to prevent Render sleep)
+app.get("/api/v1/health", (req, res) => {
+  res.status(200).json({ ok: true, ts: new Date().toISOString() });
+});
+app.get("/ping", (req, res) => {
+  res.status(200).send("ok");
+});
+
 // Versioned APIs
 // Mount user routes at /api/v1 so endpoints become /api/v1/login, /api/v1/register
 app.use("/api/v1", userRoutes);                 // Example: /api/v1/register

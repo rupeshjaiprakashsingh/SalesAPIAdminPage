@@ -7,6 +7,7 @@ import "../styles/HomeDashboard.css";
 export default function HomeDashboard() {
   const [userRole, setUserRole] = useState("");
   const [userId, setUserId] = useState("");
+  const [userName, setUserName] = useState("Staff");
   const [loading, setLoading] = useState(true);
 
   // Admin stats
@@ -18,14 +19,17 @@ export default function HomeDashboard() {
   const [userStats, setUserStats] = useState(null);
 
   const navigate = useNavigate();
-  const token = JSON.parse(localStorage.getItem("auth")) || localStorage.getItem("token") || "";
+  const token =
+    JSON.parse(localStorage.getItem("auth")) ||
+    localStorage.getItem("token") ||
+    "";
 
   useEffect(() => {
-    // Get user role from token
     try {
       const payload = JSON.parse(atob(token.split(".")[1]));
       setUserRole(payload.role || "user");
       setUserId(payload.id);
+      setUserName(payload.name || payload.username || "Staff");
     } catch (err) {
       console.error("Token parse error:", err);
       setUserRole("user");
@@ -33,41 +37,37 @@ export default function HomeDashboard() {
   }, [token]);
 
   useEffect(() => {
-    if (userRole) {
-      fetchDashboardData();
-    }
+    if (userRole) fetchDashboardData();
   }, [userRole, userId]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
       if (userRole === "admin") {
-        // Fetch admin stats
         const [statsRes, trendRes, activityRes] = await Promise.all([
           axios.get("/api/v1/dashboard/admin-stats", {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
           }),
           axios.get("/api/v1/dashboard/attendance-trend?days=7", {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
           }),
           axios.get("/api/v1/dashboard/recent-activity?limit=10", {
-            headers: { Authorization: `Bearer ${token}` }
-          })
+            headers: { Authorization: `Bearer ${token}` },
+          }),
         ]);
 
         setAdminStats(statsRes.data.stats);
         setTrend(trendRes.data.trend);
-
         const activities = activityRes.data.activities;
         setRecentActivity(activities);
         if (activities.length > 0) {
           lastKnownActivityId.current = activities[0]._id;
         }
       } else {
-        // Fetch user stats
-        const statsRes = await axios.get(`/api/v1/dashboard/user-stats/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const statsRes = await axios.get(
+          `/api/v1/dashboard/user-stats/${userId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
         setUserStats(statsRes.data.stats);
       }
     } catch (err) {
@@ -79,51 +79,48 @@ export default function HomeDashboard() {
 
   // Notification Logic
   const lastKnownActivityId = React.useRef(null);
-  const audioRef = React.useRef(new Audio("https://codeskulptor-demos.commondatastorage.googleapis.com/pang/pop.mp3"));
+  const audioRef = React.useRef(
+    new Audio(
+      "https://codeskulptor-demos.commondatastorage.googleapis.com/pang/pop.mp3"
+    )
+  );
 
   useEffect(() => {
     if (userRole !== "admin") return;
 
-    // Request permission
     if (Notification.permission !== "granted") {
       Notification.requestPermission();
     }
 
     const checkForNewActivity = async () => {
       try {
-        const res = await axios.get("/api/v1/dashboard/recent-activity?limit=5", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await axios.get(
+          "/api/v1/dashboard/recent-activity?limit=5",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
         const latestActivities = res.data.activities;
 
         if (latestActivities.length > 0) {
           const newest = latestActivities[0];
-
-          // If we have a last known ID, and the newest ID is different -> New Activity!
-          if (lastKnownActivityId.current && newest._id !== lastKnownActivityId.current) {
-            // Find all new activities (simplified: just the top one or iterate)
-            // For simplicity, we'll notify about the top one, or logic to find all newer could be added
-            // But usually just notifying the newest is sufficient for polling
-
+          if (
+            lastKnownActivityId.current &&
+            newest._id !== lastKnownActivityId.current
+          ) {
             const activityName = newest.userId?.name || "Someone";
             const type = newest.attendanceType;
 
-            // Play Sound
-            audioRef.current.play().catch(e => console.log("Audio play failed", e));
+            audioRef.current
+              .play()
+              .catch((e) => console.log("Audio play failed", e));
 
-            // Show Desktop Notification
             if (Notification.permission === "granted") {
               new Notification("New Attendance Activity", {
                 body: `${activityName} marked ${type}`,
-                icon: "/vite.svg" // fallback icon
+                icon: "/vite.svg",
               });
             }
-
-            // Update list in UI
             setRecentActivity(latestActivities);
           }
-
-          // Update ref
           lastKnownActivityId.current = newest._id;
         }
       } catch (err) {
@@ -131,7 +128,7 @@ export default function HomeDashboard() {
       }
     };
 
-    const interval = setInterval(checkForNewActivity, 5000); // Poll every 5 seconds
+    const interval = setInterval(checkForNewActivity, 5000);
     return () => clearInterval(interval);
   }, [userRole, token]);
 
@@ -139,6 +136,7 @@ export default function HomeDashboard() {
     return (
       <div className="loading-container">
         <div className="spinner"></div>
+        <span>Loading dashboard...</span>
       </div>
     );
   }
@@ -151,38 +149,61 @@ export default function HomeDashboard() {
           trend={trend}
           recentActivity={recentActivity}
           navigate={navigate}
+          userName={userName}
         />
       ) : (
         <UserDashboard
           stats={userStats}
           navigate={navigate}
+          userName={userName}
         />
       )}
     </div>
   );
 }
 
-// Admin Dashboard Component
-function AdminDashboard({ stats, trend, recentActivity, navigate }) {
+// ─── Admin Dashboard ─────────────────────────────────────────────────────────
+function AdminDashboard({ stats, trend, recentActivity, navigate, userName }) {
+  const today = new Date();
+  const day = today.getDate();
+  const dateStr = today.toLocaleDateString("en-IN", {
+    weekday: "long",
+    month: "long",
+    year: "numeric",
+  });
+
   return (
     <>
-      <div className="dashboard-header">
-        <h1>Admin Dashboard</h1>
-        <p>Real-time insights and analytics</p>
+      {/* Welcome Banner */}
+      <div className="dashboard-welcome">
+        <div className="welcome-content">
+          <div className="welcome-text">
+            <h1>Welcome back, {userName} 🚀</h1>
+            <p>Here's what's happening with your team today.</p>
+          </div>
+          <div className="welcome-date">
+            <div className="welcome-date-day">{day}</div>
+            <div className="welcome-date-info">{dateStr.replace(/^\w+, /, "")}</div>
+          </div>
+        </div>
       </div>
 
       {/* Stats Cards */}
       <div className="stats-grid">
         <div className="stat-card stat-primary">
-          <div className="stat-icon">👥</div>
+          <div className="stat-icon">
+            <i className="ri-team-line"></i>
+          </div>
           <div className="stat-details">
             <h3>{stats?.totalUsers || 0}</h3>
-            <p>Total Users</p>
+            <p>Total Staff</p>
           </div>
         </div>
 
         <div className="stat-card stat-success">
-          <div className="stat-icon">✓</div>
+          <div className="stat-icon">
+            <i className="ri-checkbox-circle-line"></i>
+          </div>
           <div className="stat-details">
             <h3>{stats?.presentToday || 0}</h3>
             <p>Present Today</p>
@@ -190,7 +211,9 @@ function AdminDashboard({ stats, trend, recentActivity, navigate }) {
         </div>
 
         <div className="stat-card stat-danger">
-          <div className="stat-icon">✗</div>
+          <div className="stat-icon">
+            <i className="ri-close-circle-line"></i>
+          </div>
           <div className="stat-details">
             <h3>{stats?.absentToday || 0}</h3>
             <p>Absent Today</p>
@@ -198,27 +221,33 @@ function AdminDashboard({ stats, trend, recentActivity, navigate }) {
         </div>
 
         <div className="stat-card stat-warning">
-          <div className="stat-icon">⏱</div>
+          <div className="stat-icon">
+            <i className="ri-time-line"></i>
+          </div>
           <div className="stat-details">
-            <h3>{stats?.averageWorkingHours || 0} hrs</h3>
+            <h3>{stats?.averageWorkingHours || 0} <small style={{fontSize:'1rem'}}>hrs</small></h3>
             <p>Avg Working Hours</p>
           </div>
         </div>
       </div>
 
-      {/* Charts and Activity */}
+      {/* Charts & Activity */}
       <div className="dashboard-grid">
-        {/* Attendance Trend */}
+        {/* Attendance Trend Chart */}
         <div className="card">
           <div className="card-header">
-            <h3>Attendance Trend (Last 7 Days)</h3>
+            <h3><i className="ri-bar-chart-2-line" style={{marginRight: '0.5rem', color: 'var(--brand-primary)'}}></i>Attendance Trend</h3>
+            <span style={{fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600}}>Last 7 Days</span>
           </div>
           <div className="card-body">
             <div className="chart-container">
               {trend && trend.length > 0 ? (
                 <SimpleBarChart data={trend} />
               ) : (
-                <p className="no-data">No trend data available</p>
+                <div className="no-data">
+                  <i className="ri-bar-chart-line"></i>
+                  No trend data available
+                </div>
               )}
             </div>
           </div>
@@ -227,7 +256,8 @@ function AdminDashboard({ stats, trend, recentActivity, navigate }) {
         {/* Recent Activity */}
         <div className="card">
           <div className="card-header">
-            <h3>Recent Activity</h3>
+            <h3><i className="ri-activity-line" style={{marginRight: '0.5rem', color: 'var(--brand-primary)'}}></i>Recent Activity</h3>
+            <span className="badge badge-primary">{recentActivity.length} events</span>
           </div>
           <div className="card-body">
             <div className="activity-list">
@@ -238,20 +268,39 @@ function AdminDashboard({ stats, trend, recentActivity, navigate }) {
                       {activity.userId?.name?.charAt(0).toUpperCase() || "?"}
                     </div>
                     <div className="activity-details">
-                      <p className="activity-name">{activity.userId?.name || "Unknown"}</p>
+                      <p className="activity-name">
+                        {activity.userId?.name || "Unknown"}
+                      </p>
                       <p className="activity-action">
-                        Marked <span className={`badge badge-${activity.attendanceType === "IN" ? "success" : "danger"}`}>
-                          {activity.attendanceType}
+                        Marked{" "}
+                        <span
+                          className={`badge badge-${
+                            activity.attendanceType === "IN"
+                              ? "success"
+                              : "danger"
+                          }`}
+                        >
+                          {activity.attendanceType === "IN" ? (
+                            <><i className="ri-login-box-line"></i> Check-In</>
+                          ) : (
+                            <><i className="ri-logout-box-line"></i> Check-Out</>
+                          )}
                         </span>
                       </p>
                     </div>
                     <div className="activity-time">
-                      {new Date(activity.deviceTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(activity.deviceTime).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="no-data">No recent activity</p>
+                <div className="no-data">
+                  <i className="ri-inbox-line"></i>
+                  No recent activity
+                </div>
               )}
             </div>
           </div>
@@ -259,63 +308,109 @@ function AdminDashboard({ stats, trend, recentActivity, navigate }) {
       </div>
 
       {/* Quick Actions */}
-      <div className="quick-actions">
-        <button className="btn btn-primary" onClick={() => navigate("/dashboard/users")}>
-          Manage Users
-        </button>
-        <button className="btn btn-secondary" onClick={() => navigate("/dashboard/attendance-list")}>
-          View All Attendance
-        </button>
-        <button className="btn btn-secondary" onClick={() => navigate("/dashboard/reports")}>
-          Generate Reports
-        </button>
+      <div className="card" style={{marginTop: '0'}}>
+        <div className="card-header">
+          <h3><i className="ri-dashboard-line" style={{marginRight:'0.5rem', color:'var(--brand-primary)'}}></i>Quick Actions</h3>
+        </div>
+        <div className="card-body">
+          <div className="quick-actions">
+            <div className="quick-action-card" onClick={() => navigate("/dashboard/users")}>
+              <div className="quick-action-icon"><i className="ri-team-line"></i></div>
+              <div className="quick-action-text">
+                <span className="quick-action-label">Manage Users</span>
+                <span className="quick-action-desc">Add, edit, or remove staff</span>
+              </div>
+            </div>
+            <div className="quick-action-card" onClick={() => navigate("/dashboard/attendance-list")}>
+              <div className="quick-action-icon"><i className="ri-list-check-3"></i></div>
+              <div className="quick-action-text">
+                <span className="quick-action-label">All Attendance</span>
+                <span className="quick-action-desc">View complete records</span>
+              </div>
+            </div>
+            <div className="quick-action-card" onClick={() => navigate("/dashboard/reports")}>
+              <div className="quick-action-icon"><i className="ri-file-chart-line"></i></div>
+              <div className="quick-action-text">
+                <span className="quick-action-label">Generate Reports</span>
+                <span className="quick-action-desc">Export attendance data</span>
+              </div>
+            </div>
+            <div className="quick-action-card" onClick={() => navigate("/dashboard/live-tracking")}>
+              <div className="quick-action-icon"><i className="ri-map-pin-line"></i></div>
+              <div className="quick-action-text">
+                <span className="quick-action-label">Live Tracking</span>
+                <span className="quick-action-desc">Real-time staff locations</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </>
   );
 }
 
-// User Dashboard Component
-function UserDashboard({ stats, navigate }) {
+// ─── User Dashboard ───────────────────────────────────────────────────────────
+function UserDashboard({ stats, navigate, userName }) {
+  const today = new Date();
+  const day = today.getDate();
+  const dateStr = today.toLocaleDateString("en-IN", {
+    weekday: "long",
+    month: "long",
+    year: "numeric",
+  });
+
   return (
     <>
-      <div className="dashboard-header">
-        <h1>My Dashboard</h1>
-        <p>Your attendance overview</p>
+      {/* Welcome Banner */}
+      <div className="dashboard-welcome">
+        <div className="welcome-content">
+          <div className="welcome-text">
+            <h1>Hello, {userName} 👋</h1>
+            <p>Track your attendance and stay on top of your schedule.</p>
+          </div>
+          <div className="welcome-date">
+            <div className="welcome-date-day">{day}</div>
+            <div className="welcome-date-info">{dateStr.replace(/^\w+, /, "")}</div>
+          </div>
+        </div>
       </div>
 
       {/* Today's Status */}
       <div className="today-status">
         <div className="card">
           <div className="card-header">
-            <h3>Today's Status</h3>
+            <h3><i className="ri-sun-line" style={{marginRight:'0.5rem', color:'var(--warning)'}}></i>Today's Status</h3>
+            <span className="badge badge-primary">{today.toLocaleDateString("en-IN", {weekday:"long"})}</span>
           </div>
           <div className="card-body">
             <div className="status-grid">
               <div className="status-item">
                 <div className={`status-indicator ${stats?.todayStatus?.checkedIn ? "active" : "inactive"}`}>
-                  {stats?.todayStatus?.checkedIn ? "✓" : "○"}
+                  <i className={stats?.todayStatus?.checkedIn ? "ri-login-box-line" : "ri-close-circle-line"}></i>
                 </div>
-                <p>Checked In</p>
+                <p>Check-In</p>
               </div>
               <div className="status-item">
                 <div className={`status-indicator ${stats?.todayStatus?.checkedOut ? "active" : "inactive"}`}>
-                  {stats?.todayStatus?.checkedOut ? "✓" : "○"}
+                  <i className={stats?.todayStatus?.checkedOut ? "ri-logout-box-line" : "ri-close-circle-line"}></i>
                 </div>
-                <p>Checked Out</p>
+                <p>Check-Out</p>
               </div>
               <div className="status-item">
-                <div className="status-value">{stats?.todayStatus?.workingHours?.toFixed(2) || 0} hrs</div>
-                <p>Working Hours</p>
+                <div className="status-value">
+                  {stats?.todayStatus?.workingHours?.toFixed(1) || "0.0"}
+                </div>
+                <p>Hours Today</p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* This Month Stats */}
+      {/* Monthly Stats */}
       <div className="stats-grid">
         <div className="stat-card stat-primary">
-          <div className="stat-icon">📅</div>
+          <div className="stat-icon"><i className="ri-calendar-check-line"></i></div>
           <div className="stat-details">
             <h3>{stats?.thisMonth?.daysPresent || 0}</h3>
             <p>Days Present</p>
@@ -323,41 +418,66 @@ function UserDashboard({ stats, navigate }) {
         </div>
 
         <div className="stat-card stat-success">
-          <div className="stat-icon">⏱</div>
+          <div className="stat-icon"><i className="ri-time-line"></i></div>
           <div className="stat-details">
-            <h3>{stats?.thisMonth?.totalWorkingHours || 0} hrs</h3>
+            <h3>{stats?.thisMonth?.totalWorkingHours || 0} <small style={{fontSize:'1rem'}}>hrs</small></h3>
             <p>Total Hours</p>
           </div>
         </div>
 
         <div className="stat-card stat-warning">
-          <div className="stat-icon">📊</div>
+          <div className="stat-icon"><i className="ri-bar-chart-line"></i></div>
           <div className="stat-details">
-            <h3>{stats?.thisMonth?.averageHoursPerDay || 0} hrs</h3>
-            <p>Avg Hours/Day</p>
+            <h3>{stats?.thisMonth?.averageHoursPerDay || 0} <small style={{fontSize:'1rem'}}>hrs</small></h3>
+            <p>Avg Hours / Day</p>
           </div>
         </div>
       </div>
 
       {/* Quick Actions */}
-      <div className="quick-actions">
-        <button className="btn btn-primary btn-lg" onClick={() => navigate("/dashboard/attendance")}>
-          📍 Mark Attendance
-        </button>
-        <button className="btn btn-secondary" onClick={() => navigate("/dashboard/attendance-list")}>
-          View My Attendance
-        </button>
-        <button className="btn btn-secondary" onClick={() => navigate("/dashboard/profile")}>
-          My Profile
-        </button>
+      <div className="card">
+        <div className="card-header">
+          <h3><i className="ri-flashlight-line" style={{marginRight:'0.5rem', color:'var(--warning)'}}></i>Quick Actions</h3>
+        </div>
+        <div className="card-body">
+          <div className="quick-actions">
+            <div className="quick-action-card" onClick={() => navigate("/dashboard/attendance")}>
+              <div className="quick-action-icon" style={{background:'var(--success-light)', color:'var(--success)'}}>
+                <i className="ri-map-pin-time-line"></i>
+              </div>
+              <div className="quick-action-text">
+                <span className="quick-action-label">Mark Attendance</span>
+                <span className="quick-action-desc">Check in or check out</span>
+              </div>
+            </div>
+            <div className="quick-action-card" onClick={() => navigate("/dashboard/attendance-list")}>
+              <div className="quick-action-icon">
+                <i className="ri-list-check-3"></i>
+              </div>
+              <div className="quick-action-text">
+                <span className="quick-action-label">My Attendance</span>
+                <span className="quick-action-desc">View your history</span>
+              </div>
+            </div>
+            <div className="quick-action-card" onClick={() => navigate("/dashboard/profile")}>
+              <div className="quick-action-icon" style={{background:'var(--warning-light)', color:'var(--warning-hover)'}}>
+                <i className="ri-user-3-line"></i>
+              </div>
+              <div className="quick-action-text">
+                <span className="quick-action-label">My Profile</span>
+                <span className="quick-action-desc">Update your information</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </>
   );
 }
 
-// Simple Bar Chart Component
+// ─── Simple Bar Chart ─────────────────────────────────────────────────────────
 function SimpleBarChart({ data }) {
-  const maxCount = Math.max(...data.map(d => d.count), 1);
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
 
   return (
     <div className="simple-bar-chart">
@@ -366,11 +486,15 @@ function SimpleBarChart({ data }) {
           <div className="bar-container">
             <div
               className="bar"
-              style={{ height: `${(item.count / maxCount) * 100}%` }}
+              style={{ height: `${(item.count / maxCount) * 100}%`, minHeight: '4px' }}
               title={`${item.count} attendees`}
             ></div>
           </div>
-          <div className="bar-label">{new Date(item.date).toLocaleDateString('en-US', { weekday: 'short' })}</div>
+          <div className="bar-label">
+            {new Date(item.date).toLocaleDateString("en-US", {
+              weekday: "short",
+            })}
+          </div>
           <div className="bar-count">{item.count}</div>
         </div>
       ))}

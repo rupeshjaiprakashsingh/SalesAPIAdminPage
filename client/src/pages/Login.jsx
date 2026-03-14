@@ -62,16 +62,33 @@ const Login = () => {
     <div className="login-main">
       <div className="login-left">
         <div className="auth-illustration">
-          <img src={Logo} alt="Logo" className="auth-logo-large" />
-          <h1>Welcome Back!</h1>
-          <p>Streamline your workforce management with our secure attendance system.</p>
+          <div className="auth-brand-icon">
+            <i className="ri-pulse-line"></i>
+          </div>
+          <h1>SalesAdmin</h1>
+          <p>The professional platform for managing your sales team's attendance, tracking, and performance in real-time.</p>
+          <div className="auth-features">
+            <div className="auth-feature-item">
+              <div className="auth-feature-icon"><i className="ri-map-pin-time-line"></i></div>
+              GPS-tagged attendance tracking
+            </div>
+            <div className="auth-feature-item">
+              <div className="auth-feature-icon"><i className="ri-map-2-line"></i></div>
+              Live staff location monitoring
+            </div>
+            <div className="auth-feature-item">
+              <div className="auth-feature-icon"><i className="ri-bar-chart-2-line"></i></div>
+              Advanced reports & analytics
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="login-right">
         <div className="login-right-container">
           <div className="login-logo">
-            <img src={Logo} alt="" />
+            <img src={Logo} alt="SalesAdmin" />
+            <div className="login-logo-text">Sales<span>Admin</span></div>
           </div>
 
           <div className="login-center">
