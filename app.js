@@ -14,7 +14,7 @@ const dashboardRoutes = require("./routes/dashboard");
 const reportRoutes = require("./routes/reports");
 
 // Cron Jobs
-const { scheduleDailyReport } = require("./utils/cronJobs");
+const { scheduleDailyReport, scheduleKeepAlive } = require("./utils/cronJobs");
 
 // Middlewares
 app.use(express.json());
@@ -49,6 +49,7 @@ const start = async () => {
 
       // Start cron jobs
       scheduleDailyReport();
+      scheduleKeepAlive();
     });
   } catch (error) {
     console.log(error);

@@ -1,4 +1,5 @@
 const cron = require("node-cron");
+const https = require("https");
 
 const generateAndSendDailyReport = async (targetDate = new Date()) => {
     try {
@@ -115,5 +116,25 @@ const scheduleDailyReport = () => {
     console.log("Daily report cron job scheduled for 6:00 PM every day");
 };
 
+const scheduleKeepAlive = () => {
+    // Ping every 10 minutes to prevent Render free tier from sleeping
+    cron.schedule("*/10 * * * *", () => {
+        // Use RENDER_EXTERNAL_URL if available, otherwise fallback to known URL
+        const url = process.env.RENDER_EXTERNAL_URL || "https://salesapiadminpage.onrender.com/api/v1/health";
+        console.log(`[Keep-Alive] Pinging ${url}...`);
+        
+        https.get(url, (res) => {
+            if (res.statusCode === 200) {
+                console.log("[Keep-Alive] Ping successful");
+            } else {
+                console.log(`[Keep-Alive] Ping failed with status: ${res.statusCode}`);
+            }
+        }).on('error', (err) => {
+            console.error("[Keep-Alive] Ping error:", err.message);
+        });
+    });
+    console.log("Keep-alive cron job scheduled for every 10 minutes");
+};
+
 // Export the function to be called from app.js
-module.exports = { scheduleDailyReport, generateAndSendDailyReport };
+module.exports = { scheduleDailyReport, generateAndSendDailyReport, scheduleKeepAlive };
