@@ -1,6 +1,19 @@
 const EmployeeLocationLog = require("../models/EmployeeLocationLog");
 const User = require("../models/User");
 
+// Helper to calculate distance in meters between two lat/lng coordinates
+function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
+    const R = 6371e3; // Radius of the earth in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in meters
+}
+
 // Log new location (High frequency)
 // userId is taken from JWT token (req.user.id), NOT from request body — security fix
 exports.logLocation = async (req, res) => {
@@ -16,18 +29,36 @@ exports.logLocation = async (req, res) => {
 
         const now = new Date();
 
-        // 1. Save the location ping to the log
-        await EmployeeLocationLog.create({
-            employeeId: userId,
-            latitude,
-            longitude,
-            accuracy,
-            battery: finalBattery,
-            timestamp: now
-        });
+        // Check if user has moved significantly (e.g., > 5 meters)
+        const user = await User.findById(userId);
+        let shouldLog = true;
 
-        // 2. Update the User's lastLocation, batteryStatus, and isOnline
-        //    This keeps the User document as source-of-truth for live map
+        if (user && user.lastLocation && user.lastLocation.lat && user.lastLocation.lng) {
+            const distance = getDistanceFromLatLonInM(
+                user.lastLocation.lat, user.lastLocation.lng,
+                latitude, longitude
+            );
+            
+            // If distance is less than 5 meters, consider them idle (do not log duplicate)
+            if (distance < 5) {
+                shouldLog = false;
+            }
+        }
+
+        // 1. Save the location ping to the log ONLY if they moved
+        if (shouldLog) {
+            await EmployeeLocationLog.create({
+                employeeId: userId,
+                latitude,
+                longitude,
+                accuracy,
+                battery: finalBattery,
+                timestamp: now
+            });
+        }
+
+        // 2. ALWAYS update the User's lastLocation, batteryStatus, and isOnline
+        //    This keeps the User document as source-of-truth for live map & online status
         await User.findByIdAndUpdate(userId, {
             lastLocation: {
                 lat: latitude,
