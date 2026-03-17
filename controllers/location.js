@@ -2,37 +2,61 @@ const EmployeeLocationLog = require("../models/EmployeeLocationLog");
 const User = require("../models/User");
 
 // Log new location (High frequency)
+// userId is taken from JWT token (req.user.id), NOT from request body — security fix
 exports.logLocation = async (req, res) => {
     try {
-        const { userId, latitude, longitude, accuracy, battery } = req.body;
+        // Always use the authenticated user's ID from JWT
+        const userId = req.user.id;
+        const { latitude, longitude, accuracy, battery, batteryPercentage } = req.body;
+        const finalBattery = battery !== undefined ? battery : batteryPercentage;
 
-        if (!userId || !latitude || !longitude) {
-            return res.status(400).json({ message: "Missing coordinates or userId" });
+        if (!latitude || !longitude) {
+            return res.status(400).json({ success: false, message: "Missing coordinates" });
         }
 
-        const log = await EmployeeLocationLog.create({
+        const now = new Date();
+
+        // 1. Save the location ping to the log
+        await EmployeeLocationLog.create({
             employeeId: userId,
             latitude,
             longitude,
             accuracy,
-            battery,
-            timestamp: new Date()
+            battery: finalBattery,
+            timestamp: now
+        });
+
+        // 2. Update the User's lastLocation, batteryStatus, and isOnline
+        //    This keeps the User document as source-of-truth for live map
+        await User.findByIdAndUpdate(userId, {
+            lastLocation: {
+                lat: latitude,
+                lng: longitude,
+                timestamp: now
+            },
+            batteryStatus: finalBattery,
+            isOnline: true
         });
 
         res.status(200).json({ success: true, message: "Location logged" });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Location log error:", error);
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
-// Get Live User Locations (Latest from Log)
+// Get Live User Locations (Latest ping per user from EmployeeLocationLog)
+// Only staff with a ping in the last 30 minutes are considered "online"
 exports.getLiveLocations = async (req, res) => {
     try {
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+
         const pipeline = [
-            // 1. Sort by latest
+            // 1. Only consider pings from last 30 minutes for freshness
+            // (We still show all staff but mark online/offline based on recency)
             { $sort: { timestamp: -1 } },
 
-            // 2. Group by user to get latest
+            // 2. Group by user to get ONLY the latest ping per user
             {
                 $group: {
                     _id: "$employeeId",
@@ -40,7 +64,7 @@ exports.getLiveLocations = async (req, res) => {
                 }
             },
 
-            // 3. Join user info
+            // 3. Join user info from User collection
             {
                 $lookup: {
                     from: "users",
@@ -49,11 +73,13 @@ exports.getLiveLocations = async (req, res) => {
                     as: "userDetails"
                 }
             },
-            { $unwind: "$userDetails" },
+            // Skip users that no longer exist in User collection
+            { $unwind: { path: "$userDetails", preserveNullAndEmptyArrays: false } },
 
-            // 4. Project
+            // 4. Project clean response
             {
                 $project: {
+                    _id: 0,
                     userId: "$_id",
                     name: "$userDetails.name",
                     email: "$userDetails.email",
@@ -61,14 +87,26 @@ exports.getLiveLocations = async (req, res) => {
                     longitude: "$latestLog.longitude",
                     lastSeen: "$latestLog.timestamp",
                     battery: "$latestLog.battery",
-                    status: "Active" // Differentiate from Attendance status
+                    // isOnline: true if last ping was within 30 minutes
+                    isOnline: {
+                        $gte: ["$latestLog.timestamp", thirtyMinutesAgo]
+                    },
+                    accuracy: "$latestLog.accuracy"
                 }
-            }
+            },
+
+            // 5. Sort: online staff first, then by lastSeen
+            { $sort: { isOnline: -1, lastSeen: -1 } }
         ];
 
         const locations = await EmployeeLocationLog.aggregate(pipeline);
 
-        res.status(200).json({ success: true, data: locations });
+        res.status(200).json({
+            success: true,
+            count: locations.length,
+            onlineCount: locations.filter(l => l.isOnline).length,
+            data: locations
+        });
 
     } catch (error) {
         res.status(500).json({ message: error.message });
