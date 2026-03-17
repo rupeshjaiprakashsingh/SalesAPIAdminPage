@@ -150,6 +150,7 @@ export default function HomeDashboard() {
           recentActivity={recentActivity}
           navigate={navigate}
           userName={userName}
+          token={token}
         />
       ) : (
         <UserDashboard
@@ -163,7 +164,40 @@ export default function HomeDashboard() {
 }
 
 // ─── Admin Dashboard ─────────────────────────────────────────────────────────
-function AdminDashboard({ stats, trend, recentActivity, navigate, userName }) {
+function AdminDashboard({ stats: initialStats, trend, recentActivity, navigate, userName, token }) {
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [displayStats, setDisplayStats] = useState(initialStats);
+
+  // Keep displayStats in sync if initialStats updates (on mount/reload)
+  useEffect(() => {
+    setDisplayStats(initialStats);
+  }, [initialStats]);
+
+  useEffect(() => {
+    const fetchSpecificDate = async () => {
+      try {
+        const res = await axios.get(`/api/v1/dashboard/admin-stats?date=${selectedDate}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setDisplayStats(res.data.stats);
+      } catch (err) {
+        console.error("Failed to fetch specific date stats", err);
+      }
+    };
+
+    if (selectedDate !== new Date().toISOString().split("T")[0]) {
+      fetchSpecificDate();
+    } else {
+      setDisplayStats(initialStats);
+    }
+  }, [selectedDate, token, initialStats]);
+
+  const changeDate = (days) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(d.toISOString().split("T")[0]);
+  };
+
   const today = new Date();
   const day = today.getDate();
   const dateStr = today.toLocaleDateString("en-IN", {
@@ -171,6 +205,14 @@ function AdminDashboard({ stats, trend, recentActivity, navigate, userName }) {
     month: "long",
     year: "numeric",
   });
+
+  const formattedSelectedDate = new Date(selectedDate).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+
+  const s = displayStats || {};
 
   return (
     <>
@@ -188,45 +230,79 @@ function AdminDashboard({ stats, trend, recentActivity, navigate, userName }) {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="stats-grid">
-        <div className="stat-card stat-primary">
-          <div className="stat-icon">
-            <i className="ri-team-line"></i>
+      {/* Attendance Metrics */}
+      <div className="attendance-metrics-section">
+        <h3>Attendance Metrics</h3>
+        <div className="am-card">
+          <div className="am-header">
+            <div className="am-title">
+              <div className="am-icon-bg">
+                <i className="ri-group-line"></i>
+              </div>
+              <span>Attendance</span>
+            </div>
+            
+            <div className="am-controls">
+              <div className="am-date-picker">
+                <i className="ri-arrow-left-s-line" onClick={() => changeDate(-1)}></i>
+                <span>{formattedSelectedDate}</span>
+                <i className="ri-arrow-right-s-line" onClick={() => changeDate(1)}></i>
+                <i className="ri-calendar-line" style={{ marginLeft: "0.5rem" }}></i>
+              </div>
+              <i className="ri-settings-3-line am-settings-icon"></i>
+            </div>
           </div>
-          <div className="stat-details">
-            <h3>{stats?.totalUsers || 0}</h3>
-            <p>Total Staff</p>
-          </div>
-        </div>
 
-        <div className="stat-card stat-success">
-          <div className="stat-icon">
-            <i className="ri-checkbox-circle-line"></i>
-          </div>
-          <div className="stat-details">
-            <h3>{stats?.presentToday || 0}</h3>
-            <p>Present Today</p>
-          </div>
-        </div>
+          <div className="am-grid">
+            <div className="am-item">
+              <div className="am-label">Present <i className="ri-information-line"></i></div>
+              <div className="am-value">{s.present || 0}</div>
+            </div>
+            <div className="am-item">
+              <div className="am-label">Absent <i className="ri-information-line"></i></div>
+              <div className="am-value">{s.absent || 0}</div>
+            </div>
+            <div className="am-item">
+              <div className="am-label">Half Day <i className="ri-information-line"></i></div>
+              <div className="am-value">{s.halfDay || 0}</div>
+            </div>
+            <div className="am-item">
+              <div className="am-label">Punched In <i className="ri-information-line"></i></div>
+              <div className="am-value">{s.punchedIn || 0}</div>
+            </div>
+            <div className="am-item">
+              <div className="am-label">Punched Out <i className="ri-information-line"></i></div>
+              <div className="am-value">{s.punchedOut || 0}</div>
+            </div>
+            <div className="am-item">
+              <div className="am-label">Not Marked <i className="ri-information-line"></i></div>
+              <div className="am-value">{s.notMarked || 0}</div>
+            </div>
 
-        <div className="stat-card stat-danger">
-          <div className="stat-icon">
-            <i className="ri-close-circle-line"></i>
-          </div>
-          <div className="stat-details">
-            <h3>{stats?.absentToday || 0}</h3>
-            <p>Absent Today</p>
-          </div>
-        </div>
-
-        <div className="stat-card stat-warning">
-          <div className="stat-icon">
-            <i className="ri-time-line"></i>
-          </div>
-          <div className="stat-details">
-            <h3>{stats?.averageWorkingHours || 0} <small style={{fontSize:'1rem'}}>hrs</small></h3>
-            <p>Avg Working Hours</p>
+            <div className="am-item">
+              <div className="am-label">On Leave</div>
+              <div className="am-value">{s.onLeave || 0}</div>
+            </div>
+            <div className="am-item">
+              <div className="am-label">Upcoming Leaves <i className="ri-information-line"></i></div>
+              <div className="am-value">{s.upcomingLeaves || 0}</div>
+            </div>
+            <div className="am-item">
+              <div className="am-label">Overtime Hours</div>
+              <div className="am-value">{s.overtimeHours || "0h 0m"}</div>
+            </div>
+            <div className="am-item">
+              <div className="am-label">Fine hours</div>
+              <div className="am-value">{s.fineHours || "0h 0m"}</div>
+            </div>
+            <div className="am-item">
+              <div className="am-label">Deactivated</div>
+              <div className="am-value">{s.deactivated || 0}</div>
+            </div>
+            <div className="am-item">
+              <div className="am-label">Daily Work Entries</div>
+              <div className="am-value">{s.dailyWorkEntries || 0}</div>
+            </div>
           </div>
         </div>
       </div>

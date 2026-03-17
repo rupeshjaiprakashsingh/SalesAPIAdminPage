@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require("../middleware/auth");
 const attendanceController = require("../controllers/attendance");
 
+router.post("/admin-add", auth, attendanceController.adminAddAttendance);
 router.post("/mark", auth, attendanceController.markAttendance);
 router.get("/list", auth, attendanceController.getAllAttendance);
 

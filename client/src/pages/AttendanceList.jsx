@@ -7,6 +7,7 @@ import "../styles/AttendanceList.css";
 export default function AttendanceList() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [users, setUsers] = useState([]);
 
   // pagination states
   const [page, setPage] = useState(1);
@@ -23,11 +24,9 @@ export default function AttendanceList() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newAttendance, setNewAttendance] = useState({
     userId: "",
-    attendanceType: "IN",
-    deviceTime: "",
-    latitude: "",
-    longitude: "",
-    address: ""
+    status: "Present",   // Present | Half Day | Absent
+    date: "",            // YYYY-MM-DD, blank = today
+    remarks: ""
   });
 
   const token =
@@ -85,11 +84,47 @@ export default function AttendanceList() {
     setLoading(false);
   };
 
+  const fetchUsers = async () => {
+    try {
+      const res = await axios.get("/api/v1/users?limit=100", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.data && res.data.users) {
+        setUsers(res.data.users);
+      }
+    } catch (err) {
+      console.error("Failed to load users for dropdown", err);
+    }
+  };
+
   // Initial load
   useEffect(() => {
+    // Optionally default to today's date if empty initially, but let's just fetch
     fetchRecords(1, limit);
+    fetchUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Helper: Arrow Pagination for Date
+  const handleDateChange = (days) => {
+    const baseDate = startDate ? new Date(startDate) : new Date();
+    baseDate.setDate(baseDate.getDate() + days);
+    const newDateStr = baseDate.toISOString().split("T")[0];
+    setStartDate(newDateStr);
+    setEndDate(newDateStr);
+  };
+
+  const getFormattedDate = () => {
+    if (!startDate && !endDate) return "All Time";
+    if (startDate === endDate || (startDate && !endDate)) {
+      return new Date(startDate).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      });
+    }
+    return "Range Selected";
+  };
 
   // Pagination
   const handlePrev = () => {
@@ -226,25 +261,28 @@ export default function AttendanceList() {
     }
   };
 
-  // Add Attendance Handler
+  // Add Attendance Handler — uses admin-only endpoint, no device/location required
   const handleAddAttendance = async (e) => {
     e.preventDefault();
+    if (!newAttendance.userId) {
+      toast.error("Please select a staff member.");
+      return;
+    }
     try {
+      const payload = {
+        userId: newAttendance.userId,
+        status: newAttendance.status,
+        date: newAttendance.date || undefined,   // blank → backend uses today
+        remarks: newAttendance.remarks || undefined
+      };
       await axios.post(
-        `/api/v1/attendance/mark`,
-        newAttendance,
+        `/api/v1/attendance/admin-add`,
+        payload,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       toast.success("Attendance added successfully");
       setShowAddModal(false);
-      setNewAttendance({
-        userId: "",
-        attendanceType: "IN",
-        deviceTime: "",
-        latitude: "",
-        longitude: "",
-        address: ""
-      });
+      setNewAttendance({ userId: "", status: "Present", date: "", remarks: "" });
       fetchRecords(page, limit);
     } catch (err) {
       toast.error(err.response?.data?.message || "Error adding attendance");
@@ -253,46 +291,59 @@ export default function AttendanceList() {
 
   return (
     <div className="attendance-list-page">
-      <div className="flex justify-between items-center mb-lg">
-        <h2 style={{ margin: 0 }}>Attendance Records</h2>
-        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-          + Add Attendance
-        </button>
-      </div>
+      {/* COMPACT HEADER — single row */}
+      <div style={{ background: 'white', padding: '6px 12px', borderRadius: '10px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+          
+          {/* Left: title + search + filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#f3e8ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9333ea', flexShrink: 0 }}>
+                <i className="ri-user-3-fill" style={{ fontSize: '13px' }}></i>
+              </div>
+              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>Daily Attendance View</h3>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <i className="ri-search-line" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', fontSize: '13px' }}></i>
+              <input
+                type="text"
+                placeholder="Search by Name"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ width: '200px', padding: '6px 10px 6px 30px', border: '1px solid #e5e7eb', borderRadius: '6px', outline: 'none', color: '#374151', fontSize: '0.8rem' }}
+              />
+            </div>
+            <button style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>
+              <i className="ri-filter-3-fill"></i> Filter
+            </button>
+            {/* Hidden date input for override */}
+            <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setEndDate(e.target.value); }} style={{ opacity: 0, position: 'absolute', pointerEvents: 'none', width: '1px', height: '1px' }} />
+          </div>
 
-      <div className="filter-row">
-        <input
-          type="text"
-          className="form-control"
-          placeholder="Search by name or email"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ flex: 1, minWidth: "200px" }}
-        />
-
-        <input
-          type="date"
-          className="form-control"
-          placeholder="Start Date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          style={{ minWidth: "150px" }}
-        />
-
-        <input
-          type="date"
-          className="form-control"
-          placeholder="End Date"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          style={{ minWidth: "150px" }}
-        />
-
-        {selectedIds.length > 0 && (
-          <button className="btn btn-danger" onClick={handleBulkDelete}>
-            Delete Selected ({selectedIds.length})
-          </button>
-        )}
+          {/* Right: date nav + actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: '#4b5563', fontSize: '0.8rem' }}>
+               <i className="ri-arrow-left-s-line" style={{ cursor: 'pointer', fontSize: '1rem' }} onClick={() => handleDateChange(-1)}></i>
+               <span style={{ minWidth: '80px', textAlign: 'center' }}>{getFormattedDate()}</span>
+               <i className="ri-arrow-right-s-line" style={{ cursor: 'pointer', fontSize: '1rem' }} onClick={() => handleDateChange(1)}></i>
+               <i className="ri-calendar-line" style={{ color: '#9ca3af', fontSize: '1rem', cursor: 'pointer' }}></i>
+            </div>
+            <button style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 12px', background: 'white', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>
+              <i className="ri-download-2-line"></i> Download
+            </button>
+            <i className="ri-settings-3-line" style={{ cursor: 'pointer', color: '#3b82f6', fontSize: '1.1rem' }}></i>
+            {userRole === "admin" && (
+              <button onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>
+                <i className="ri-add-line"></i> Add
+              </button>
+            )}
+            {selectedIds.length > 0 && userRole === "admin" && (
+              <button onClick={handleBulkDelete} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>
+                <i className="ri-delete-bin-line"></i> ({selectedIds.length})
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -371,37 +422,11 @@ export default function AttendanceList() {
                         {/* DATE */}
                         <td className="date-cell">{r.dateStr}</td>
 
-                        {/* TYPE - Show both IN and OUT */}
+                        {/* TYPE */}
                         <td>
-                          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                            {hasIn && (
-                              <span
-                                style={{
-                                  padding: "2px 6px",
-                                  borderRadius: "4px",
-                                  backgroundColor: "#dcfce7",
-                                  color: "#166534",
-                                  fontSize: "12px",
-                                  fontWeight: "bold",
-                                }}
-                              >
-                                IN
-                              </span>
-                            )}
-                            {hasOut && (
-                              <span
-                                style={{
-                                  padding: "2px 6px",
-                                  borderRadius: "4px",
-                                  backgroundColor: "#fee2e2",
-                                  color: "#991b1b",
-                                  fontSize: "12px",
-                                  fontWeight: "bold",
-                                }}
-                              >
-                                OUT
-                              </span>
-                            )}
+                          <div style={{ display: "flex", gap: "4px", flexDirection: "column" }}>
+                            {hasIn  && <span className="badge-in">IN</span>}
+                            {hasOut && <span className="badge-out">OUT</span>}
                           </div>
                         </td>
 
@@ -454,29 +479,14 @@ export default function AttendanceList() {
 
                         {/* STATUS */}
                         <td>
-                          <span
-                            style={{
-                              padding: "2px 6px",
-                              borderRadius: "4px",
-                              backgroundColor:
-                                (r.outRecord?.status || r.inRecord?.status) === "Half Day"
-                                  ? "#fef9c3"
-                                  : (r.outRecord?.status || r.inRecord?.status) === "Absent"
-                                    ? "#fee2e2"
-                                    : (r.outRecord?.status || r.inRecord?.status) === "Full Day"
-                                      ? "#dcfce7"
-                                      : "#dcfce7",
-                              color:
-                                (r.outRecord?.status || r.inRecord?.status) === "Half Day"
-                                  ? "#854d0e"
-                                  : (r.outRecord?.status || r.inRecord?.status) === "Absent"
-                                    ? "#991b1b"
-                                    : "#166534",
-                              fontSize: "12px",
-                            }}
-                          >
-                            {r.outRecord?.status || r.inRecord?.status || "Present"}
-                          </span>
+                          {(() => {
+                            const st = r.outRecord?.status || r.inRecord?.status || "Present";
+                            const cls = st === "Half Day" ? "status-halfday"
+                              : st === "Absent"   ? "status-absent"
+                              : st === "Full Day" ? "status-fullday"
+                              : "status-present";
+                            return <span className={`status-pill ${cls}`}>{st}</span>;
+                          })()}
                         </td>
 
                         {/* REMARKS */}
@@ -487,40 +497,17 @@ export default function AttendanceList() {
                           })()}
                         </td>
 
-                        {/* ACTIONS (Only for Admin) */}
-                        <td>
+                        {/* ACTIONS */}
+                        <td style={{ whiteSpace: 'nowrap' }}>
                           {userRole === "admin" && (
-                            <>
-                              <button
-                                onClick={() => handleEdit(r)}
-                                style={{
-                                  marginRight: "5px",
-                                  padding: "4px 8px",
-                                  backgroundColor: "#f59e0b",
-                                  color: "white",
-                                  border: "none",
-                                  borderRadius: "4px",
-                                  cursor: "pointer",
-                                  fontSize: "12px",
-                                }}
-                              >
-                                Edit
+                            <div style={{ display: 'flex', gap: '5px' }}>
+                              <button className="action-btn action-btn-edit" onClick={() => handleEdit(r)}>
+                                ✎ Edit
                               </button>
-                              <button
-                                onClick={() => handleDelete(r)}
-                                style={{
-                                  padding: "4px 8px",
-                                  backgroundColor: "#ef4444",
-                                  color: "white",
-                                  border: "none",
-                                  borderRadius: "4px",
-                                  cursor: "pointer",
-                                  fontSize: "12px",
-                                }}
-                              >
-                                Delete
+                              <button className="action-btn action-btn-delete" onClick={() => handleDelete(r)}>
+                                ✕ Delete
                               </button>
-                            </>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -532,29 +519,10 @@ export default function AttendanceList() {
           </div>
 
           {/* PAGINATION */}
-          <div
-            className="pager"
-            style={{
-              marginTop: 15,
-              display: "flex",
-              alignItems: "center",
-              gap: 15,
-            }}
-          >
-            <button onClick={handlePrev} disabled={page <= 1}>
-              Prev
-            </button>
-
-            <span>
-              Page {page} / {Math.max(1, Math.ceil(total / limit))}
-            </span>
-
-            <button
-              onClick={handleNext}
-              disabled={page >= Math.ceil(total / limit)}
-            >
-              Next
-            </button>
+          <div className="pager">
+            <button onClick={handlePrev} disabled={page <= 1}>Prev</button>
+            <span>Page {page} / {Math.max(1, Math.ceil(total / limit))}</span>
+            <button onClick={handleNext} disabled={page >= Math.ceil(total / limit)}>Next</button>
           </div>
         </>
       )
@@ -639,85 +607,122 @@ export default function AttendanceList() {
         )
       }
 
-      {/* ADD ATTENDANCE MODAL */}
+      {/* ADD ATTENDANCE MODAL — simplified: user + status only */}
       {showAddModal && (
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <form onSubmit={handleAddAttendance}>
-              <h3>Add Attendance</h3>
+              <h3 style={{ marginTop: 0, marginBottom: '18px', color: '#111827' }}>Add Attendance</h3>
 
-              <div className="form-group">
-                <label className="form-label">User ID</label>
-                <input
-                  type="text"
-                  className="form-control"
+              {/* Info Banner */}
+              <div style={{
+                background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px',
+                padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#1e40af'
+              }}>
+                ℹ️ Select a staff member and their attendance status. All other details (time, location, working hours) will be filled automatically.
+              </div>
+
+              {/* Staff Member */}
+              <div className="form-group" style={{ marginBottom: '14px' }}>
+                <label className="form-label" style={{ fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                  Staff Member <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <select
+                  className="form-select"
                   value={newAttendance.userId}
                   onChange={(e) => setNewAttendance({ ...newAttendance, userId: e.target.value })}
                   required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Type</label>
-                <select
-                  className="form-select"
-                  value={newAttendance.attendanceType}
-                  onChange={(e) => setNewAttendance({ ...newAttendance, attendanceType: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '14px' }}
                 >
-                  <option value="IN">IN</option>
-                  <option value="OUT">OUT</option>
+                  <option value="">— Select a Staff Member —</option>
+                  {users.map((user) => (
+                    <option key={user._id} value={user._id}>
+                      {user.name} ({user.email})
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Date & Time</label>
+              {/* Status */}
+              <div className="form-group" style={{ marginBottom: '14px' }}>
+                <label className="form-label" style={{ fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                  Attendance Status <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  {['Present', 'Half Day', 'Absent'].map((s) => (
+                    <label
+                      key={s}
+                      style={{
+                        flex: 1, textAlign: 'center', padding: '10px 6px',
+                        border: `2px solid ${
+                          newAttendance.status === s
+                            ? s === 'Present' ? '#16a34a' : s === 'Half Day' ? '#d97706' : '#dc2626'
+                            : '#e5e7eb'
+                        }`,
+                        borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+                        backgroundColor: newAttendance.status === s
+                          ? s === 'Present' ? '#dcfce7' : s === 'Half Day' ? '#fef9c3' : '#fee2e2'
+                          : 'white',
+                        color: newAttendance.status === s
+                          ? s === 'Present' ? '#166534' : s === 'Half Day' ? '#854d0e' : '#991b1b'
+                          : '#374151',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="status"
+                        value={s}
+                        checked={newAttendance.status === s}
+                        onChange={(e) => setNewAttendance({ ...newAttendance, status: e.target.value })}
+                        style={{ display: 'none' }}
+                      />
+                      {s === 'Present' ? '✅' : s === 'Half Day' ? '🕑' : '❌'} {s}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date (optional) */}
+              <div className="form-group" style={{ marginBottom: '14px' }}>
+                <label className="form-label" style={{ fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                  Date <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional — defaults to today)</span>
+                </label>
                 <input
-                  type="datetime-local"
-                  className="form-control"
-                  value={newAttendance.deviceTime}
-                  onChange={(e) => setNewAttendance({ ...newAttendance, deviceTime: e.target.value })}
-                  required
+                  type="date"
+                  value={newAttendance.date}
+                  onChange={(e) => setNewAttendance({ ...newAttendance, date: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '14px' }}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Latitude</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="form-control"
-                  value={newAttendance.latitude}
-                  onChange={(e) => setNewAttendance({ ...newAttendance, latitude: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Longitude</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="form-control"
-                  value={newAttendance.longitude}
-                  onChange={(e) => setNewAttendance({ ...newAttendance, longitude: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Address</label>
+              {/* Remarks (optional) */}
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label className="form-label" style={{ fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                  Remarks <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span>
+                </label>
                 <input
                   type="text"
-                  className="form-control"
-                  value={newAttendance.address}
-                  onChange={(e) => setNewAttendance({ ...newAttendance, address: e.target.value })}
+                  placeholder="e.g. On leave, WFH, etc."
+                  value={newAttendance.remarks}
+                  onChange={(e) => setNewAttendance({ ...newAttendance, remarks: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '14px' }}
                 />
               </div>
 
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)}>
+              <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddModal(false); setNewAttendance({ userId: '', status: 'Present', date: '', remarks: '' }); }}
+                  style={{ padding: '8px 18px', borderRadius: '6px', border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontWeight: 600 }}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Add
+                <button
+                  type="submit"
+                  style={{ padding: '8px 18px', borderRadius: '6px', background: '#2563eb', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  ✔ Add Attendance
                 </button>
               </div>
             </form>

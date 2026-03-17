@@ -8,3 +8,4 @@ export { default as UserManagement } from "./UserManagement";
 export { default as LiveTracking } from "./LiveTracking";
 export { default as TimelineReport } from "./TimelineReport";
 export { default as CalendarReport } from "./CalendarReport";
+export { default as MusterRoll } from "./MusterRoll";

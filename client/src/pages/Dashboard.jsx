@@ -97,25 +97,23 @@ const Dashboard = () => {
     <div className="dashboard-main">
       {/* SIDEBAR */}
       <aside className={`dashboard-sidebar ${menuOpen ? "open" : ""}`}>
-        {/* Logo */}
+        {/* Logo - icon only in collapsed mode */}
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">
             <i className="ri-pulse-line"></i>
-          </div>
-          <div className="sidebar-logo-text">
-            <span className="sidebar-app-name">SalesAdmin</span>
-            <span className="sidebar-app-tagline">Staff Tracking</span>
           </div>
         </div>
 
         {/* Navigation */}
         <nav className="sidebar-nav">
           <div className="sidebar-section-label">Main</div>
+          {/* Navigation - icons only with tooltips */}
           <ul>
             {NAV_ITEMS_COMMON.filter(item => !(role === "admin" && item.label === "Mark Attendance")).map((item) => (
               <li key={item.to}>
                 <Link
                   to={item.to}
+                  data-tooltip={item.label}
                   className={`nav-item ${
                     item.exact
                       ? location.pathname === item.to ? "active" : ""
@@ -124,7 +122,6 @@ const Dashboard = () => {
                   onClick={() => setMenuOpen(false)}
                 >
                   <i className={item.icon}></i>
-                  {item.label}
                 </Link>
               </li>
             ))}
@@ -138,11 +135,11 @@ const Dashboard = () => {
                   <li key={item.to}>
                     <Link
                       to={item.to}
+                      data-tooltip={item.label}
                       className={`nav-item ${location.pathname.startsWith(item.to) ? "active" : ""}`}
                       onClick={() => setMenuOpen(false)}
                     >
                       <i className={item.icon}></i>
-                      {item.label}
                     </Link>
                   </li>
                 ))}
@@ -155,25 +152,24 @@ const Dashboard = () => {
             <li>
               <Link
                 to="/logout"
+                data-tooltip="Sign Out"
                 className="nav-item nav-logout"
                 onClick={() => setMenuOpen(false)}
               >
                 <i className="ri-logout-box-r-line"></i>
-                Sign Out
               </Link>
             </li>
           </ul>
         </nav>
 
-        {/* User Card */}
+        {/* User Card - avatar only with tooltip */}
         <div className="sidebar-footer">
-          <div className="sidebar-user-card">
+          <div
+            className="sidebar-user-card"
+            data-tooltip={`${userName} · ${role}`}
+          >
             <div className="sidebar-user-avatar">
               {userName?.charAt(0)?.toUpperCase() || "S"}
-            </div>
-            <div className="sidebar-user-info">
-              <div className="sidebar-user-name">{userName}</div>
-              <div className="sidebar-user-role">{role}</div>
             </div>
           </div>
         </div>

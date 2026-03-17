@@ -155,41 +155,26 @@ const UserManagement = () => {
                                     <td>{user.username}</td>
                                     <td>{user.email}</td>
                                     <td>
-                                        <span
-                                            style={{
-                                                padding: "4px 8px",
-                                                borderRadius: "4px",
-                                                backgroundColor:
-                                                    user.role === "admin" ? "#e3f2fd" : "#f5f5f5",
-                                                color: user.role === "admin" ? "#1976d2" : "#616161",
-                                                fontWeight: "500",
-                                                fontSize: "12px",
-                                            }}
-                                        >
+                                        <span className={`role-badge ${user.role === "admin" ? "role-admin" : "role-user"}`}>
                                             {user.role ? user.role.toUpperCase() : "USER"}
                                         </span>
                                     </td>
                                     <td>
-                                        <button
-                                            className="btn btn-sm btn-warning"
-                                            onClick={() => openEditModal(user)}
-                                            style={{ marginRight: "5px" }}
-                                        >
-                                            Edit
-                                        </button>
-                                        <button
-                                            className="btn btn-sm btn-danger"
-                                            onClick={() => handleDelete(user._id)}
-                                        >
-                                            Delete
-                                        </button>
-                                        <button
-                                            className="btn btn-sm btn-info"
-                                            onClick={() => handleResetDevice(user._id)}
-                                            style={{ marginLeft: "5px", backgroundColor: "#17a2b8", borderColor: "#17a2b8", color: "white" }}
-                                        >
-                                            Reset Device
-                                        </button>
+                                        <div style={{ display: 'flex', gap: '5px' }}>
+                                            <button className="action-btn action-btn-edit" onClick={() => openEditModal(user)}>
+                                                ✎ Edit
+                                            </button>
+                                            <button className="action-btn action-btn-delete" onClick={() => handleDelete(user._id)}>
+                                                ✕ Delete
+                                            </button>
+                                            <button 
+                                                className="action-btn"
+                                                style={{ background: "#e0f2fe", color: "#0284c7" }}
+                                                onClick={() => handleResetDevice(user._id)}
+                                            >
+                                                ↺ Reset Device
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

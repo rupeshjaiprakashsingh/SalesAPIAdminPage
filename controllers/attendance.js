@@ -2,6 +2,119 @@ const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const { isInsideGeofence } = require("../utils/geoFence");
 
+// =========================================================
+// ADMIN MANUAL ADD ATTENDANCE
+// Admin-only: select a user + status, system fills defaults
+// =========================================================
+exports.adminAddAttendance = async (req, res) => {
+  try {
+    // Only admins can use this route
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Access denied. Admins only." });
+    }
+
+    const { userId, status, date, remarks } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
+
+    const validStatuses = ["Present", "Half Day", "Absent"];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({ message: "status must be one of: Present, Half Day, Absent" });
+    }
+
+    // Verify the user exists
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Determine the date to use (default = today IST)
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    let attendanceDate;
+    if (date) {
+      // date is expected as YYYY-MM-DD string
+      attendanceDate = new Date(date + "T09:00:00.000Z"); // 9am UTC = 2:30pm IST approx
+    } else {
+      const nowIST = new Date(Date.now() + IST_OFFSET);
+      const yyyy = nowIST.getUTCFullYear();
+      const mm = String(nowIST.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(nowIST.getUTCDate()).padStart(2, '0');
+      attendanceDate = new Date(`${yyyy}-${mm}-${dd}T09:00:00.000Z`);
+    }
+
+    // Working hours by status
+    let workingHours = 0;
+    if (status === "Present") workingHours = 8;
+    else if (status === "Half Day") workingHours = 4;
+    else workingHours = 0;
+
+    // Default/placeholder values for required model fields
+    const DEFAULT_LAT = 0;
+    const DEFAULT_LNG = 0;
+    const DEFAULT_DEVICE_ID = `admin-manual-${Date.now()}`;
+    const inTime = new Date(attendanceDate.getTime());           // 9:00 AM IST
+    const outTime = new Date(attendanceDate.getTime() + workingHours * 60 * 60 * 1000); // IN + workingHours
+
+    // Build IN record
+    const inRecord = new Attendance({
+      userId,
+      attendanceType: "IN",
+      latitude: DEFAULT_LAT,
+      longitude: DEFAULT_LNG,
+      locationAccuracy: 0,
+      deviceTime: inTime,
+      deviceId: DEFAULT_DEVICE_ID,
+      address: "Manually added by Admin",
+      batteryPercentage: null,
+      networkType: "MANUAL",
+      remarks: remarks || "Manually added by Admin",
+      ipAddress: req.ip,
+      validatedInsideGeoFence: false,
+      status: "Present",
+    });
+
+    // Build OUT record (only if not Absent)
+    let outRecord = null;
+    if (status !== "Absent") {
+      outRecord = new Attendance({
+        userId,
+        attendanceType: "OUT",
+        latitude: DEFAULT_LAT,
+        longitude: DEFAULT_LNG,
+        locationAccuracy: 0,
+        deviceTime: outTime,
+        deviceId: DEFAULT_DEVICE_ID,
+        address: "Manually added by Admin",
+        batteryPercentage: null,
+        networkType: "MANUAL",
+        remarks: remarks || "Manually added by Admin",
+        ipAddress: req.ip,
+        validatedInsideGeoFence: false,
+        workingHours,
+        status,
+      });
+    } else {
+      // For Absent: just an IN record with Absent status
+      inRecord.status = "Absent";
+    }
+
+    await inRecord.save();
+    if (outRecord) await outRecord.save();
+
+    return res.status(201).json({
+      message: `Attendance marked as ${status} for ${targetUser.name}`,
+      in: inRecord,
+      out: outRecord || null,
+    });
+
+  } catch (error) {
+    console.error("[adminAddAttendance] Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Mark Attendance (IN/OUT)
 exports.markAttendance = async (req, res) => {
   try {

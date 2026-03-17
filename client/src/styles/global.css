@@ -94,7 +94,7 @@
     --transition-spring: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 
     /* Heights */
-    --navbar-height: 64px;
+    --navbar-height: 54px;
     --sidebar-width: 260px;
     --sidebar-collapsed: 72px;
 }
@@ -107,10 +107,13 @@
 }
 
 html {
-    scroll-behavior: smooth;
+    height: 100%;
+    overflow: hidden;
 }
 
 body {
+    height: 100%;
+    overflow: hidden;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -294,13 +297,14 @@ a {
     box-shadow: var(--shadow-lg);
 }
 
-/* ========== Table Styles ========== */
+/* ========== Table Styles (Reference Design — clean, minimal) ========== */
 .table-container {
     width: 100%;
     overflow-x: auto;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border);
-    background-color: var(--surface);
+    border-radius: 12px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .table-responsive {
@@ -309,38 +313,75 @@ a {
 }
 
 .table-responsive thead {
-    background: linear-gradient(135deg, var(--background), var(--background-dark));
-    border-bottom: 2px solid var(--border-dark);
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
 }
 
 .table-responsive th {
-    padding: 0.875rem 1rem;
+    padding: 6px 8px;
     text-align: left;
-    font-size: 0.75rem;
+    font-size: 0.6rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
+    letter-spacing: 0.04em;
+    color: #6b7280;
+    white-space: nowrap;
 }
 
 .table-responsive td {
-    padding: 0.875rem 1rem;
-    border-bottom: 1px solid var(--border);
-    color: var(--text-primary);
-    font-size: 0.875rem;
+    padding: 4px 8px;
+    border-bottom: 1px solid #f3f4f6;
+    color: #374151;
+    font-size: 0.72rem;
+    font-weight: 400;
+    vertical-align: middle;
 }
 
 .table-responsive tbody tr {
-    transition: var(--transition);
+    transition: background 0.12s;
 }
 
 .table-responsive tbody tr:hover {
-    background-color: var(--brand-primary-light);
+    background-color: #f9fafb;
 }
 
 .table-responsive tbody tr:last-child td {
     border-bottom: none;
 }
+
+/* Universal table class — same rules */
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table thead {
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.table th {
+    padding: 6px 8px;
+    text-align: left;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6b7280;
+    white-space: nowrap;
+}
+
+.table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #f3f4f6;
+    color: #374151;
+    font-size: 0.72rem;
+    vertical-align: middle;
+}
+
+.table tbody tr { transition: background 0.12s; }
+.table tbody tr:hover { background: #f9fafb; }
+.table tbody tr:last-child td { border-bottom: none; }
 
 /* ========== Form Styles ========== */
 .form-group {

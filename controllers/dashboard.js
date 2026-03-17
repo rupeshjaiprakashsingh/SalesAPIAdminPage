@@ -5,65 +5,68 @@ const mongoose = require("mongoose");
 // GET ADMIN DASHBOARD STATS
 exports.getAdminStats = async (req, res) => {
     try {
-        // Total users count
-        const totalUsers = await User.countDocuments();
+        const dateParam = req.query.date;
+        const targetDate = dateParam ? new Date(dateParam) : new Date();
+        targetDate.setHours(0, 0, 0, 0);
+        const nextDay = new Date(targetDate);
+        nextDay.setDate(nextDay.getDate() + 1);
 
-        // Today's date range
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        // Total users count
+        const totalUsers = await User.countDocuments({ role: { $ne: "admin" } }); // Count only staff
 
         // Today's attendance - count unique users who marked IN
-        const todayAttendance = await Attendance.aggregate([
+        const todayIns = await Attendance.aggregate([
             {
                 $match: {
-                    deviceTime: { $gte: today, $lt: tomorrow },
+                    deviceTime: { $gte: targetDate, $lt: nextDay },
                     attendanceType: "IN"
                 }
             },
-            {
-                $group: {
-                    _id: "$userId"
-                }
-            },
-            {
-                $count: "present"
-            }
+            { $group: { _id: "$userId" } },
+            { $count: "present" }
         ]);
-
-        const presentToday = todayAttendance[0]?.present || 0;
-        const absentToday = totalUsers - presentToday;
-
-        // Average working hours (last 30 days)
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-        const avgWorkingHours = await Attendance.aggregate([
+        const presentToday = todayIns[0]?.present || 0;
+        
+        // Count unique users who marked OUT
+        const todayOuts = await Attendance.aggregate([
             {
                 $match: {
-                    deviceTime: { $gte: thirtyDaysAgo },
-                    attendanceType: "OUT",
-                    workingHours: { $exists: true, $ne: null }
+                    deviceTime: { $gte: targetDate, $lt: nextDay },
+                    attendanceType: "OUT"
                 }
             },
-            {
-                $group: {
-                    _id: null,
-                    avgHours: { $avg: "$workingHours" }
-                }
-            }
+            { $group: { _id: "$userId" } },
+            { $count: "punchedOut" }
         ]);
+        const punchedOut = todayOuts[0]?.punchedOut || 0;
 
-        const averageHours = avgWorkingHours[0]?.avgHours || 0;
+        const absentToday = totalUsers - presentToday > 0 ? totalUsers - presentToday : 0;
+
+        // Mock additional fields that might be added to DB later
+        const halfDay = 0;
+        const onLeave = 0;
+        const upcomingLeaves = 0;
+        const overtimeHours = "0h 0m";
+        const fineHours = "0h 0m";
+        const deactivated = 0;
+        const dailyWorkEntries = presentToday + punchedOut; // Approximation for now
 
         res.status(200).json({
             success: true,
             stats: {
                 totalUsers,
-                presentToday,
-                absentToday,
-                averageWorkingHours: parseFloat(averageHours.toFixed(2))
+                present: presentToday,
+                absent: absentToday,
+                halfDay,
+                punchedIn: presentToday,
+                punchedOut,
+                notMarked: absentToday,
+                onLeave,
+                upcomingLeaves,
+                overtimeHours,
+                fineHours,
+                deactivated,
+                dailyWorkEntries
             }
         });
     } catch (error) {
