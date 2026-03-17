@@ -128,6 +128,7 @@ exports.getMonthlyReport = async (req, res) => {
 
         allUsers.forEach(user => {
             userReportMap[user._id.toString()] = {
+                _id: user._id,
                 name: user.name,
                 email: user.email,
                 daysPresent: 0,

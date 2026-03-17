@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { Link } from "react-router-dom";
 import "../styles/global.css"; // Reuse standard table styles
 
 export default function MusterRoll() {
@@ -284,12 +285,25 @@ export default function MusterRoll() {
                                                                         display: 'flex', flexDirection: 'column', alignItems: 'center', width: '26px' 
                                                                     }}>
                                                                         <span style={{ fontSize: '0.6rem', color: '#9ca3af', marginBottom: '2px' }}>{i+1}</span>
-                                                                        <div style={{ 
-                                                                            width: '20px', height: '20px', borderRadius: '4px', background: bg, color: color,
-                                                                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'
-                                                                        }}>
-                                                                            {text}
-                                                                        </div>
+                                                                        
+                                                                        {user._id && text !== '-' && text !== 'A' ? (
+                                                                            <Link to={`/dashboard/attendance/${user._id}?date=${dayStr}`} style={{ textDecoration: 'none' }} title="View details">
+                                                                                <div style={{ 
+                                                                                    width: '20px', height: '20px', borderRadius: '4px', background: bg, color: color,
+                                                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold',
+                                                                                    cursor: 'pointer'
+                                                                                }}>
+                                                                                    {text}
+                                                                                </div>
+                                                                            </Link>
+                                                                        ) : (
+                                                                            <div style={{ 
+                                                                                width: '20px', height: '20px', borderRadius: '4px', background: bg, color: color,
+                                                                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'
+                                                                            }}>
+                                                                                {text}
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 )
                                                             })}
