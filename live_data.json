@@ -1,0 +1,26 @@
+{
+  "success": true,
+  "count": 1,
+  "checkedInCount": 1,
+  "checkedOutCount": 0,
+  "data": [
+    {
+      "userId": "697a2a8b9fa99beab19ceb28",
+      "name": "Rupesh Singh",
+      "email": "rupeshsingh7208@gmail.com",
+      "latitude": 28.6139,
+      "longitude": 77.209,
+      "lastLocationUpdated": "2026-03-06T16:45:48.605Z",
+      "battery": 85,
+      "isOnline": true,
+      "checkInTime": "2026-03-17T03:15:27.435Z",
+      "checkInAddress": "V343+6HJ, Nijampur Malhaur, Uttar Pradesh 226028, India",
+      "checkInLocation": {
+        "lat": 26.8555799,
+        "lng": 81.0538565
+      },
+      "checkedOut": false,
+      "geofenceValidated": false
+    }
+  ]
+}

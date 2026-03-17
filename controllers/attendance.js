@@ -191,6 +191,21 @@ exports.markAttendance = async (req, res) => {
 
     await record.save();
 
+    // Update User.isOnline status and lastLocation based on attendance type
+    if (attendanceType === "OUT") {
+      await User.findByIdAndUpdate(userId, { 
+        isOnline: false,
+        lastLocation: { lat: latitude, lng: longitude, timestamp: serverTime },
+        batteryStatus: batteryPercentage ?? undefined
+      });
+    } else if (attendanceType === "IN") {
+      await User.findByIdAndUpdate(userId, { 
+        isOnline: true,
+        lastLocation: { lat: latitude, lng: longitude, timestamp: serverTime },
+        batteryStatus: batteryPercentage ?? undefined
+      });
+    }
+
     res.status(201).json({
       message: `${attendanceType} marked successfully`,
       insideOffice: insideFence,
@@ -445,22 +460,67 @@ exports.updateAttendance = async (req, res) => {
   }
 };
 
-// GET LIVE LOCATIONS (Latest location for each user)
+// GET LIVE LOCATIONS — Staff who checked IN today and their current location
+// Uses IST-aware date window to find today's check-ins.
+// Priority: User.lastLocation (most recent GPS ping) → check-in location (fallback)
 exports.getLiveLocations = async (req, res) => {
   try {
-    const pipeline = [
-      // 1. Sort by latest first
-      { $sort: { deviceTime: -1 } },
+    const mongoose = require("mongoose");
 
-      // 2. Group by user to get the latest record
+    // Build IST-aware "today" window
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    const nowUTC = new Date();
+    const istDate = new Date(nowUTC.getTime() + IST_OFFSET);
+
+    const startOfDayIST = new Date(istDate);
+    startOfDayIST.setUTCHours(0, 0, 0, 0);
+    const startOfDayUTC = new Date(startOfDayIST.getTime() - IST_OFFSET);
+
+    const endOfDayIST = new Date(istDate);
+    endOfDayIST.setUTCHours(23, 59, 59, 999);
+    const endOfDayUTC = new Date(endOfDayIST.getTime() - IST_OFFSET);
+
+    const pipeline = [
+      // 1. Match only today's IN records
       {
-        $group: {
-          _id: "$userId",
-          latestRecord: { $first: "$$ROOT" }
+        $match: {
+          attendanceType: "IN",
+          createdAt: { $gte: startOfDayUTC, $lte: endOfDayUTC }
         }
       },
 
-      // 3. Lookup User info
+      // 2. Sort by most recent first (handles duplicate INs gracefully)
+      { $sort: { createdAt: -1 } },
+
+      // 3. Group by userId — keep only the latest IN per user
+      {
+        $group: {
+          _id: "$userId",
+          inRecord: { $first: "$$ROOT" }
+        }
+      },
+
+      // 4. Lookup today's OUT record for each user
+      {
+        $lookup: {
+          from: "attendances",
+          let: { uid: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$userId", "$$uid"] },
+                attendanceType: "OUT",
+                createdAt: { $gte: startOfDayUTC, $lte: endOfDayUTC }
+              }
+            },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 }
+          ],
+          as: "outRecords"
+        }
+      },
+
+      // 5. Lookup User info (for lastLocation, batteryStatus, isOnline)
       {
         $lookup: {
           from: "users",
@@ -469,24 +529,68 @@ exports.getLiveLocations = async (req, res) => {
           as: "userDetails"
         }
       },
+      { $unwind: { path: "$userDetails", preserveNullAndEmptyArrays: false } },
 
-      // 4. Unwind user details
-      { $unwind: "$userDetails" },
-
-      // 5. Project specific fields
+      // 6. Project final fields
       {
         $project: {
+          _id: 0,
           userId: "$_id",
           name: "$userDetails.name",
           email: "$userDetails.email",
-          latitude: "$latestRecord.latitude",
-          longitude: "$latestRecord.longitude",
-          lastSeen: "$latestRecord.deviceTime",
-          status: "$latestRecord.attendanceType", // IN or OUT
-          battery: "$latestRecord.batteryPercentage",
-          address: "$latestRecord.address"
+          mobileNumber: "$userDetails.mobileNumber",
+
+          // Live location: prefer User.lastLocation only if it is newer than the check-in time
+          latitude: {
+            $cond: [
+              { $gt: ["$userDetails.lastLocation.timestamp", "$inRecord.deviceTime"] },
+              "$userDetails.lastLocation.lat",
+              "$inRecord.latitude"
+            ]
+          },
+          longitude: {
+            $cond: [
+              { $gt: ["$userDetails.lastLocation.timestamp", "$inRecord.deviceTime"] },
+              "$userDetails.lastLocation.lng",
+              "$inRecord.longitude"
+            ]
+          },
+          lastLocationUpdated: {
+            $cond: [
+              { $gt: ["$userDetails.lastLocation.timestamp", "$inRecord.deviceTime"] },
+              "$userDetails.lastLocation.timestamp",
+              "$inRecord.deviceTime"
+            ]
+          },
+
+          // Battery from User.batteryStatus (updated on every GPS ping)
+          battery: {
+            $ifNull: ["$userDetails.batteryStatus", "$inRecord.batteryPercentage"]
+          },
+
+          // Online status from User model (set to true on GPS ping)
+          isOnline: { $ifNull: ["$userDetails.isOnline", false] },
+
+          // Attendance info
+          checkInTime: "$inRecord.deviceTime",
+          checkInAddress: "$inRecord.address",
+          checkInLocation: {
+            lat: "$inRecord.latitude",
+            lng: "$inRecord.longitude"
+          },
+
+          // Checkout info (null if not checked out yet)
+          checkedOut: { $gt: [{ $size: "$outRecords" }, 0] },
+          checkOutTime: { $arrayElemAt: ["$outRecords.deviceTime", 0] },
+          checkOutAddress: { $arrayElemAt: ["$outRecords.address", 0] },
+          workingHours: { $arrayElemAt: ["$outRecords.workingHours", 0] },
+
+          geofenceValidated: "$inRecord.validatedInsideGeoFence"
         }
-      }
+      },
+
+      // 7. Sort: currently checked-in (not yet out) first, then online, then by checkInTime
+      { $sort: { checkedOut: 1, isOnline: -1, checkInTime: -1 } }
     ];
 
     const locations = await Attendance.aggregate(pipeline);
@@ -494,9 +598,12 @@ exports.getLiveLocations = async (req, res) => {
     res.status(200).json({
       success: true,
       count: locations.length,
+      checkedInCount: locations.filter(l => !l.checkedOut).length,
+      checkedOutCount: locations.filter(l => l.checkedOut).length,
       data: locations
     });
   } catch (error) {
+    console.error("[getLiveLocations] Error:", error);
     res.status(500).json({ message: error.message });
   }
 };

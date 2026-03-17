@@ -1,0 +1,22 @@
+﻿Connecting to DB...
+Γ£à Connected to Database.
+
+======================================================
+≡ƒº¬ TESTING: GET /api/v1/location/live
+======================================================
+[Status: 200] Output:
+{ success: [33mtrue[39m, count: [33m0[39m, onlineCount: [33m0[39m, data: [] }
+
+======================================================
+≡ƒº¬ TESTING: GET /api/v1/attendance/live-locations
+======================================================
+[Status: 200] Output:
+{
+  success: [33mtrue[39m,
+  count: [33m0[39m,
+  checkedInCount: [33m0[39m,
+  checkedOutCount: [33m0[39m,
+  data: []
+}
+
+Γ£à Tests Completed successfully.
