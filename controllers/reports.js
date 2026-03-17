@@ -594,11 +594,12 @@ exports.getTimelineReport = async (req, res) => {
         const endOfDay = new Date(date);
         endOfDay.setHours(23, 59, 59, 999);
 
-        // Fetch logs (using Attendance for now, but could be LocationLog)
-        const logs = await Attendance.find({
-            userId,
-            deviceTime: { $gte: startOfDay, $lte: endOfDay }
-        }).sort({ deviceTime: 1 }).lean();
+        // Fetch logs (using EmployeeLocationLog for precise map routing)
+        const EmployeeLocationLog = require("../models/EmployeeLocationLog");
+        const logs = await EmployeeLocationLog.find({
+            employeeId: userId,
+            timestamp: { $gte: startOfDay, $lte: endOfDay }
+        }).sort({ timestamp: 1 }).lean();
 
         if (!logs || logs.length === 0) {
             return res.status(200).json({
@@ -632,8 +633,9 @@ exports.getTimelineReport = async (req, res) => {
         const route = logs.map(log => ({
             lat: log.latitude,
             lng: log.longitude,
-            time: log.deviceTime,
-            type: log.attendanceType
+            time: log.timestamp,
+            battery: log.battery,
+            accuracy: log.accuracy
         }));
 
         for (let i = 1; i < logs.length; i++) {
@@ -644,7 +646,7 @@ exports.getTimelineReport = async (req, res) => {
                 currentLog.latitude, currentLog.longitude
             );
 
-            const timeDiff = new Date(currentLog.deviceTime) - new Date(previousLog.deviceTime); // ms
+            const timeDiff = new Date(currentLog.timestamp) - new Date(previousLog.timestamp); // ms
             const timeDiffMin = timeDiff / (1000 * 60);
 
             if (dist > DISTANCE_THRESHOLD) {
@@ -658,8 +660,8 @@ exports.getTimelineReport = async (req, res) => {
                     stopDetails.push({
                         latitude: currentLog.latitude,
                         longitude: currentLog.longitude,
-                        startTime: previousLog.deviceTime,
-                        endTime: currentLog.deviceTime,
+                        startTime: previousLog.timestamp,
+                        endTime: currentLog.timestamp,
                         duration: Math.round(timeDiffMin),
                         address: currentLog.address || "Unknown"
                     });

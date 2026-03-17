@@ -1,11 +1,10 @@
 import { RouterProvider, createBrowserRouter } from "react-router-dom";
-import { Dashboard, HomeLayout, Landing, Login, Logout, Register, UserManagement, Enquiries, LiveTracking, TimelineReport, CalendarReport } from "./pages";
+import { Dashboard, HomeLayout, Landing, Login, Logout, Register, UserManagement, LiveTracking, TimelineReport, CalendarReport } from "./pages";
 import { ToastContainer } from "react-toastify";
 import HomeDashboard from "./pages/HomeDashboard";
 import MarkAttendance from "./pages/MarkAttendance";
 import AttendanceList from "./pages/AttendanceList";
 import GetAttendanceByIdDetails from "./pages/GetAttendanceByIdDetails";
-import Reports from "./pages/Reports";
 import Profile from "./pages/Profile";
 
 const router = createBrowserRouter([
@@ -24,10 +23,8 @@ const router = createBrowserRouter([
           { path: "attendance", element: <MarkAttendance /> },
           { path: "attendance-list", element: <AttendanceList /> },
           { path: "attendance/:id", element: <GetAttendanceByIdDetails /> },
-          { path: "reports", element: <Reports /> },
           { path: "profile", element: <Profile /> },
           { path: "users", element: <UserManagement /> },
-          { path: "enquiries", element: <Enquiries /> },
           { path: "live-tracking", element: <LiveTracking /> },
           { path: "timeline-report", element: <TimelineReport /> },
           { path: "calendar-report", element: <CalendarReport /> }

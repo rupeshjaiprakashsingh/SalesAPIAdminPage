@@ -20,6 +20,8 @@ const UserManagement = () => {
         email: "",
         password: "",
         role: "user",
+        mobileNumber: "",
+        dateOfBirth: "",
     });
     const [isEdit, setIsEdit] = useState(false);
 
@@ -96,7 +98,11 @@ const UserManagement = () => {
     };
 
     const openEditModal = (user) => {
-        setCurrentUser({ ...user, password: "" }); // Don't show password
+        let dobStr = "";
+        if (user.dateOfBirth) {
+            dobStr = new Date(user.dateOfBirth).toISOString().split('T')[0];
+        }
+        setCurrentUser({ ...user, dateOfBirth: dobStr, password: "" }); // Don't show password
         setIsEdit(true);
         setShowModal(true);
     };
@@ -108,23 +114,23 @@ const UserManagement = () => {
     };
 
     const resetForm = () => {
-        setCurrentUser({ name: "", username: "", email: "", password: "", role: "user" });
+        setCurrentUser({ name: "", username: "", email: "", password: "", role: "user", mobileNumber: "", dateOfBirth: "" });
     };
 
     return (
         <div className="user-management-container">
-            <h2 className="user-management-header">User Management</h2>
+            <h2 className="user-management-header">Staff Management</h2>
 
             <div className="controls">
                 <input
                     type="text"
-                    placeholder="Search users..."
+                    placeholder="Search staff..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="search-input"
                 />
                 <button className="btn btn-primary" onClick={openAddModal}>
-                    Add User
+                    Add Staff
                 </button>
             </div>
 
@@ -214,7 +220,7 @@ const UserManagement = () => {
             {showModal && (
                 <div className="modal-overlay">
                     <div className="modal-content">
-                        <h3>{isEdit ? "Edit User" : "Add User"}</h3>
+                        <h3>{isEdit ? "Edit Staff" : "Add Staff"}</h3>
                         <form onSubmit={handleSave}>
                             <div className="form-group">
                                 <label>Name</label>
@@ -245,6 +251,28 @@ const UserManagement = () => {
                                     value={currentUser.email}
                                     onChange={(e) =>
                                         setCurrentUser({ ...currentUser, email: e.target.value })
+                                    }
+                                    required
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Mobile Number</label>
+                                <input
+                                    type="text"
+                                    value={currentUser.mobileNumber || ""}
+                                    onChange={(e) =>
+                                        setCurrentUser({ ...currentUser, mobileNumber: e.target.value })
+                                    }
+                                    required
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Date of Birth</label>
+                                <input
+                                    type="date"
+                                    value={currentUser.dateOfBirth || ""}
+                                    onChange={(e) =>
+                                        setCurrentUser({ ...currentUser, dateOfBirth: e.target.value })
                                     }
                                     required
                                 />

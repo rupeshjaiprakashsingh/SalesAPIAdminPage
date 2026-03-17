@@ -166,11 +166,32 @@ export default function TimelineReport() {
                                 />
                             )}
 
+                            {/* All Route Points */}
+                            {reportData.route.map((point, index) => {
+                                // Don't draw tiny dot if it's start or end, as we have big markers for them
+                                if (index === 0 || index === reportData.route.length - 1) return null;
+                                return (
+                                    <Marker
+                                        key={`point-${index}`}
+                                        position={{ lat: point.lat, lng: point.lng }}
+                                        icon={{
+                                            path: "M-10,0a10,10 0 1,0 20,0a10,10 0 1,0 -20,0",
+                                            fillColor: "#3b82f6",
+                                            fillOpacity: 1,
+                                            strokeWeight: 1,
+                                            strokeColor: "white",
+                                            scale: 0.3
+                                        }}
+                                        onClick={() => setSelectedPoint({ ...point, label: `Ping at ${new Date(point.time).toLocaleTimeString()}` })}
+                                    />
+                                );
+                            })}
+
                             {/* Start Marker */}
                             {reportData.route.length > 0 && (
                                 <Marker
                                     position={reportData.route[0]}
-                                    label="S"
+                                    label={{ text: "S", color: "white", fontWeight: "bold" }}
                                     title="Start"
                                     onClick={() => setSelectedPoint({ ...reportData.route[0], label: "Start Point" })}
                                 />
@@ -180,7 +201,7 @@ export default function TimelineReport() {
                             {reportData.route.length > 1 && (
                                 <Marker
                                     position={reportData.route[reportData.route.length - 1]}
-                                    label="E"
+                                    label={{ text: "E", color: "white", fontWeight: "bold" }}
                                     title="End"
                                     onClick={() => setSelectedPoint({ ...reportData.route[reportData.route.length - 1], label: "End Point" })}
                                 />
@@ -214,10 +235,26 @@ export default function TimelineReport() {
                                     position={{ lat: selectedPoint.lat, lng: selectedPoint.lng }}
                                     onCloseClick={() => setSelectedPoint(null)}
                                 >
-                                    <div>
-                                        <h4>{selectedPoint.label}</h4>
-                                        <p>{new Date(selectedPoint.time).toLocaleTimeString()}</p>
-                                        {selectedPoint.address && <p style={{ fontSize: '12px', color: '#666' }}>{selectedPoint.address}</p>}
+                                    <div style={{ padding: '5px' }}>
+                                        <h4 style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#1f2937' }}>{selectedPoint.label}</h4>
+                                        <p style={{ margin: '0 0 5px 0', fontSize: '13px' }}><strong>Time:</strong> {new Date(selectedPoint.time).toLocaleTimeString()}</p>
+                                        
+                                        {selectedPoint.battery !== undefined && (
+                                            <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: selectedPoint.battery < 20 ? 'red' : 'green' }}>
+                                                <strong>🔋 Battery:</strong> {selectedPoint.battery}%
+                                            </p>
+                                        )}
+                                        {selectedPoint.accuracy !== undefined && (
+                                            <p style={{ margin: '0 0 5px 0', fontSize: '13px' }}>
+                                                <strong>🎯 Accuracy:</strong> {selectedPoint.accuracy.toFixed(1)}m
+                                            </p>
+                                        )}
+                                        
+                                        {selectedPoint.address && (
+                                            <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#666', borderTop: '1px solid #eee', paddingTop: '5px' }}>
+                                                📍 {selectedPoint.address}
+                                            </p>
+                                        )}
                                     </div>
                                 </InfoWindow>
                             )}

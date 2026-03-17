@@ -12,9 +12,7 @@ const NAV_ITEMS_COMMON = [
 ];
 
 const NAV_ITEMS_ADMIN = [
-  { to: "/dashboard/reports", label: "Reports", icon: "ri-bar-chart-2-line" },
-  { to: "/dashboard/users", label: "User Management", icon: "ri-team-line" },
-  { to: "/dashboard/enquiries", label: "Enquiries", icon: "ri-mail-send-line" },
+  { to: "/dashboard/users", label: "Staff Management", icon: "ri-team-line" },
   { to: "/dashboard/live-tracking", label: "Live Tracking", icon: "ri-map-2-line" },
   { to: "/dashboard/timeline-report", label: "Timeline Report", icon: "ri-time-line" },
   { to: "/dashboard/calendar-report", label: "Calendar Report", icon: "ri-calendar-event-line" },
@@ -114,7 +112,7 @@ const Dashboard = () => {
         <nav className="sidebar-nav">
           <div className="sidebar-section-label">Main</div>
           <ul>
-            {NAV_ITEMS_COMMON.map((item) => (
+            {NAV_ITEMS_COMMON.filter(item => !(role === "admin" && item.label === "Mark Attendance")).map((item) => (
               <li key={item.to}>
                 <Link
                   to={item.to}

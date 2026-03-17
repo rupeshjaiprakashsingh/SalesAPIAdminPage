@@ -317,7 +317,7 @@ function AdminDashboard({ stats, trend, recentActivity, navigate, userName }) {
             <div className="quick-action-card" onClick={() => navigate("/dashboard/users")}>
               <div className="quick-action-icon"><i className="ri-team-line"></i></div>
               <div className="quick-action-text">
-                <span className="quick-action-label">Manage Users</span>
+                <span className="quick-action-label">Manage Staff</span>
                 <span className="quick-action-desc">Add, edit, or remove staff</span>
               </div>
             </div>
@@ -326,13 +326,6 @@ function AdminDashboard({ stats, trend, recentActivity, navigate, userName }) {
               <div className="quick-action-text">
                 <span className="quick-action-label">All Attendance</span>
                 <span className="quick-action-desc">View complete records</span>
-              </div>
-            </div>
-            <div className="quick-action-card" onClick={() => navigate("/dashboard/reports")}>
-              <div className="quick-action-icon"><i className="ri-file-chart-line"></i></div>
-              <div className="quick-action-text">
-                <span className="quick-action-label">Generate Reports</span>
-                <span className="quick-action-desc">Export attendance data</span>
               </div>
             </div>
             <div className="quick-action-card" onClick={() => navigate("/dashboard/live-tracking")}>

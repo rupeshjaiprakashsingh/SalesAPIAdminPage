@@ -86,9 +86,9 @@ const getUserById = async (req, res) => {
 
 const createUser = async (req, res) => {
   try {
-    const { name, email, password, role, mobileNumber, dateOfBirth } = req.body;
-    if (!name || !email || !password || !mobileNumber || !dateOfBirth) {
-      return res.status(400).json({ msg: "Please provide all fields including mobile and DOB" });
+    const { name, username, email, password, role, mobileNumber, dateOfBirth } = req.body;
+    if (!name || !username || !email || !password || !mobileNumber || !dateOfBirth) {
+      return res.status(400).json({ msg: "Please provide all fields including username, mobile, and DOB" });
     }
 
     const userExists = await User.findOne({ email });
@@ -96,7 +96,12 @@ const createUser = async (req, res) => {
       return res.status(400).json({ msg: "Email already in use" });
     }
 
-    const user = await User.create({ name, email, password, mobileNumber, dateOfBirth, role: role || "user" });
+    const userExists2 = await User.findOne({ username });
+    if (userExists2) {
+      return res.status(400).json({ msg: "Username already in use" });
+    }
+
+    const user = await User.create({ name, username, email, password, mobileNumber, dateOfBirth, role: role || "user" });
     res.status(201).json({ user });
   } catch (error) {
     res.status(500).json({ msg: error.message });

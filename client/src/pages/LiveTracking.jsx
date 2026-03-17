@@ -102,11 +102,9 @@ const LiveTracking = () => {
         }
     }, [todayStr]);
 
-    // Auto-refresh every 15 seconds
+    // Fetch data once on mount
     useEffect(() => {
         fetchLiveLocations();
-        const interval = setInterval(fetchLiveLocations, 15000);
-        return () => clearInterval(interval);
     }, [fetchLiveLocations]);
 
     // ─── Fetch Timeline Path when employee is selected ─────────────────────────
@@ -240,7 +238,7 @@ const LiveTracking = () => {
                         🗺️ Live Tracking
                     </h2>
                     <p style={{ margin: 0, fontSize: "0.8rem", color: "#666" }}>
-                        Today's field staff — auto-refreshes every 15s
+                        Today's field staff
                     </p>
                 </div>
 
