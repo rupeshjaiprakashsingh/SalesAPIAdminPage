@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import "../styles/HomeDashboard.css";
 import MusterRoll from "./MusterRoll";
+import DailyAttendanceView from "./DailyAttendanceView";
 
 export default function HomeDashboard() {
   const [userRole, setUserRole] = useState("");
@@ -307,6 +308,9 @@ function AdminDashboard({ stats: initialStats, trend, recentActivity, navigate, 
           </div>
         </div>
       </div>
+
+      {/* Daily Attendance View List */}
+      <DailyAttendanceView />
 
       {/* Charts & Activity */}
       <div className="dashboard-grid">

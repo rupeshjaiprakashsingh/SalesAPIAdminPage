@@ -162,6 +162,7 @@ const GeoDashboard = () => {
                             events.push({
                                 type: "Stop",
                                 time: stop.startTime,
+                                endTime: stop.endTime,
                                 duration: stop.duration,
                                 address: stop.address || "Unknown Location",
                                 lat: stop.latitude,
@@ -170,22 +171,71 @@ const GeoDashboard = () => {
                         });
                     }
                     
-                    events.sort((a,b) => new Date(a.time) - new Date(b.time));
-                    
-                    let withDrives = [];
-                    for(let i=0; i<events.length; i++){
-                        withDrives.push(events[i]);
-                        if(i < events.length - 1) {
-                            withDrives.push({
-                                type: "Drive",
-                                time: new Date(new Date(events[i].time).getTime() + 60000).toISOString(), 
-                                label: "Drive",
-                                dummyKm: (Math.random() * 2 + 0.1).toFixed(2),
-                                dummyMin: Math.floor(Math.random() * 15 + 2)
+                    for (let i = 1; i < report.route.length; i++) {
+                        const prev = report.route[i-1];
+                        const curr = report.route[i];
+                        const diffMins = (new Date(curr.time) - new Date(prev.time)) / 60000;
+                        
+                        if (diffMins > 10) { 
+                            events.push({
+                                type: "Outage",
+                                time: prev.time,
+                                endTime: curr.time,
+                                durationMin: Math.round(diffMins),
+                                message: "Location services disabled" 
                             });
                         }
                     }
-                    setTimelineEvents(withDrives);
+                    
+                    events.sort((a,b) => new Date(a.time) - new Date(b.time));
+                    
+                    let finalEvents = [];
+                    const calcDist = (lat1, lon1, lat2, lon2) => {
+                        if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+                        const R = 6371;
+                        const dLat = (lat2 - lat1) * Math.PI / 180;
+                        const dLon = (lon2 - lon1) * Math.PI / 180;
+                        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+                        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                    };
+
+                    const getDriveStats = (startTime, endTime) => {
+                         let distKm = 0;
+                         let driveEndPt = null;
+                         for (let pt of report.route) {
+                             const ptTime = new Date(pt.time);
+                             if (ptTime >= new Date(startTime) && ptTime <= new Date(endTime)) {
+                                  if (driveEndPt) {
+                                      distKm += calcDist(driveEndPt.lat, driveEndPt.lng, pt.lat, pt.lng);
+                                  }
+                                  driveEndPt = pt;
+                             }
+                         }
+                         const durationMin = Math.round((new Date(endTime) - new Date(startTime)) / 60000);
+                         return { distKm: distKm.toFixed(2), durationMin };
+                    };
+
+                    for (let i = 0; i < events.length; i++) {
+                        finalEvents.push(events[i]);
+                        
+                        if (i < events.length - 1) {
+                             let nextEvent = events[i+1];
+                             let driveStartTime = events[i].endTime || events[i].time;
+                             let driveEndTime = nextEvent.time;
+                             
+                             let { distKm, durationMin } = getDriveStats(driveStartTime, driveEndTime);
+                             
+                             if (durationMin > 0) {
+                                 finalEvents.push({
+                                     type: "Drive",
+                                     time: driveStartTime,
+                                     distanceKm: distKm,
+                                     durationMin: durationMin
+                                 });
+                             }
+                        }
+                    }
+                    setTimelineEvents(finalEvents);
                 } else {
                      setTimelineEvents([]);
                 }
@@ -507,60 +557,93 @@ const GeoDashboard = () => {
 
     const renderTimeline = () => {
         const selUserName = usersList.find(u => u._id === timelineUser)?.name || "Select User";
+        
+        // Helper to remove spiderweb jitter visually
+        const calcDistMeters = (lat1, lon1, lat2, lon2) => {
+            if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+            const R = 6371e3; // meters
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+        };
+
+        const getSmoothedPath = (route) => {
+             if (!route || route.length === 0) return [];
+             const smoothed = [{ lat: Number(route[0].lat), lng: Number(route[0].lng) }];
+             for (let i = 1; i < route.length; i++) {
+                 const pt = route[i];
+                 const dist = calcDistMeters(smoothed[smoothed.length-1].lat, smoothed[smoothed.length-1].lng, Number(pt.lat), Number(pt.lng));
+                 if (dist > 15) { // Filter out <15m jumps to stop visual spider webbing
+                     smoothed.push({ lat: Number(pt.lat), lng: Number(pt.lng) });
+                 }
+             }
+             return smoothed;
+        };
+
         return (
             <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 160px)', gap: '16px' }}>
                 {/* Timeline Top Controls */}
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
-                        <select 
-                            value={timelineUser}
-                            onChange={(e) => setTimelineUser(e.target.value)}
-                            style={{ padding: '8px 16px', border: 'none', outline: 'none', background: 'transparent', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer', minWidth: '220px' }}
-                        >
-                            <option value="">-- Employee --</option>
-                            {usersList.map((usr) => (
-                                <option key={usr._id} value={usr._id}>{usr.name.toUpperCase()} {usr.employeeId ? `(${usr.employeeId})` : ''}</option>
-                            ))}
-                        </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden', background: '#fff' }}>
+                            <select 
+                                value={timelineUser}
+                                onChange={(e) => setTimelineUser(e.target.value)}
+                                style={{ padding: '8px 16px', border: 'none', outline: 'none', background: 'transparent', fontWeight: '500', fontSize: '0.85rem', color: '#374151', cursor: 'pointer', minWidth: '240px' }}
+                            >
+                                <option value="">-- Employee --</option>
+                                {usersList.map((usr) => (
+                                    <option key={usr._id} value={usr._id}>{usr.name.toUpperCase()} {usr.employeeId ? `(${usr.employeeId})` : ''}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden', background: '#fff', color: '#4b5563' }}>
+                            <button onClick={() => changeTimelineDate(-1)} style={{ padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', borderRight: '1px solid #e5e7eb', color: '#6b7280' }}>&lt;</button>
+                            <input 
+                                type="date" 
+                                value={timelineDate}
+                                onChange={(e) => setTimelineDate(e.target.value)}
+                                style={{ padding: '8px 16px', border: 'none', outline: 'none', background: 'transparent', fontWeight: '600', fontSize: '0.85rem', fontFamily: 'inherit', color: '#374151' }}
+                            />
+                            <button onClick={() => changeTimelineDate(1)} style={{ padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', borderLeft: '1px solid #e5e7eb', borderRight: '1px solid #e5e7eb', color: '#6b7280' }}>&gt;</button>
+                            <button style={{ padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#6b7280' }}>
+                                <i className="ri-calendar-line"></i>
+                            </button>
+                        </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
-                        <button onClick={() => changeTimelineDate(-1)} style={{ padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', borderRight: '1px solid #e5e7eb' }}>&lt;</button>
-                        <input 
-                            type="date" 
-                            value={timelineDate}
-                            onChange={(e) => setTimelineDate(e.target.value)}
-                            style={{ padding: '8px 16px', border: 'none', outline: 'none', background: 'transparent', fontWeight: 'bold', fontSize: '0.85rem', fontFamily: 'inherit' }}
-                        />
-                        <button onClick={() => changeTimelineDate(1)} style={{ padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', borderLeft: '1px solid #e5e7eb' }}>&gt;</button>
-                    </div>
+                    <button style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#ffffff', color: '#3b82f6', border: '1px solid #bfdbfe', borderRadius: '6px', cursor: 'pointer', fontWeight: 500, fontSize: '0.85rem' }}>
+                        <i className="ri-share-line"></i> Share
+                    </button>
                 </div>
 
                 {/* Timeline Split Layout */}
                 <div style={{ display: 'flex', flex: 1, gap: '16px', overflow: 'hidden' }}>
                     
                     {/* Left Sidebar */}
-                    <div style={{ width: '320px', background: '#ffffff', borderRadius: '12px', border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <div style={{ width: '360px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                         <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontWeight: 600, color: '#111827' }}>Timeline</span>
+                            <span style={{ fontWeight: 600, color: '#374151', fontSize: '0.9rem' }}>Timeline</span>
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                <div style={{ width: '30px', height: '16px', background: '#10b981', borderRadius: '16px', position: 'relative' }}>
-                                    <div style={{ width: '12px', height: '12px', background: 'white', borderRadius: '50%', position: 'absolute', right: '2px', top: '2px' }}></div>
+                                <div style={{ width: '36px', height: '20px', background: '#10b981', borderRadius: '20px', position: 'relative', cursor: 'pointer' }}>
+                                    <div style={{ width: '16px', height: '16px', background: 'white', borderRadius: '50%', position: 'absolute', right: '2px', top: '2px' }}></div>
                                 </div>
-                                <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>Activity</span>
+                                <span style={{ fontSize: '0.8rem', color: '#6b7280', fontWeight: 500 }}>Activity</span>
                             </div>
                         </div>
                         
                         <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                                <i className="ri-user-line" style={{ color: '#9ca3af' }}></i>
-                                <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#4b5563', textTransform: 'uppercase' }}>{selUserName}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                                <i className="ri-user-3-line" style={{ color: '#9ca3af', fontSize: '1rem' }}></i>
+                                <span style={{ fontWeight: 500, fontSize: '0.85rem', color: '#374151', textTransform: 'uppercase' }}>{selUserName}</span>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#6b7280' }}>
-                                <span>{new Date(timelineDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} <span style={{background: '#e5e7eb', padding:'2px 6px', borderRadius:'4px', marginLeft:'4px'}}>Asia/Kolkata</span></span>
-                                <div>
-                                    <span style={{ fontWeight: 600, color: '#374151' }}>{timelineReport ? timelineReport.totalDistance : "0.00"} km</span>
-                                    <span style={{ color: '#10b981', fontWeight: 600, marginLeft: '6px' }}>{timelineReport ? `${Math.floor(timelineReport.motionTime/60)}h ${timelineReport.motionTime%60}m` : "0h 0m"}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: '#6b7280' }}>
+                                <span>{new Date(timelineDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} <span style={{background: '#e5e7eb', padding:'2px 6px', borderRadius:'4px', marginLeft:'4px', fontSize: '0.7rem', color: '#374151'}}>Asia/Kolkata</span></span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontWeight: 600, color: '#6b7280' }}>{timelineReport ? timelineReport.totalDistance : "0.00"} km</span>
+                                    <span style={{ color: '#10b981', fontWeight: 600 }}>{timelineReport ? `${Math.floor(timelineReport.motionTime/60)}h ${timelineReport.motionTime%60}m` : "0h 0m"}</span>
                                 </div>
                             </div>
                         </div>
@@ -573,46 +656,66 @@ const GeoDashboard = () => {
                                 <div key={idx} style={{ display: 'flex', marginBottom: '24px', position: 'relative' }}>
                                     {/* Line connecting items */}
                                     {idx !== timelineEvents.length - 1 && (
-                                        <div style={{ position: 'absolute', left: '72px', top: '24px', bottom: '-24px', width: '2px', background: '#e5e7eb', zIndex: 1 }}></div>
+                                        <div style={{ position: 'absolute', left: '72px', top: '24px', bottom: '-24px', width: '1px', background: '#d1d5db', zIndex: 1 }}></div>
                                     )}
                                     
-                                    <div style={{ width: '60px', textAlign: 'right', fontSize: '0.75rem', color: '#6b7280', paddingTop: '4px' }}>
+                                    <div style={{ width: '60px', textAlign: 'right', fontSize: '0.75rem', color: '#9ca3af', fontWeight: 500, paddingTop: '1px' }}>
                                         {new Date(evt.time).toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'})}
                                     </div>
-                                    <div style={{ width: '26px', display: 'flex', justifyContent: 'center', zIndex: 2, paddingTop: '4px' }}>
+                                    <div style={{ width: '26px', display: 'flex', justifyContent: 'center', zIndex: 2 }}>
                                         {evt.type === 'Start' ? (
-                                            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#fff', border: '2px solid #3b82f6' }}></div>
+                                            <i className="ri-focus-3-line" style={{ color: '#6b7280', background: '#fff', fontSize: '1.2rem', marginTop: '-2px' }}></i>
                                         ) : evt.type === 'Stop' ? (
-                                            <i className="ri-stop-circle-line" style={{ color: '#ef4444', background: '#fff', fontSize: '1rem', lineHeight: '12px' }}></i>
+                                            <i className="ri-hourglass-2-line" style={{ color: '#6b7280', background: '#fff', fontSize: '1.1rem', marginTop: '-1px' }}></i>
+                                        ) : evt.type === 'Outage' ? (
+                                            <i className="ri-cloud-off-line" style={{ color: '#ef4444', background: '#fff', fontSize: '1.2rem', marginTop: '-2px' }}></i>
                                         ) : (
-                                            <i className="ri-steering-2-line" style={{ color: '#6b7280', background: '#fff', fontSize: '1rem', lineHeight: '12px' }}></i>
+                                            <i className="ri-steering-2-line" style={{ color: '#6b7280', background: '#fff', fontSize: '1.2rem', marginTop: '-2px' }}></i>
                                         )}
                                     </div>
-                                    <div style={{ flex: 1, paddingTop: '2px' }}>
+                                    <div style={{ flex: 1, paddingLeft: '8px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#111827' }}>
+                                            <span style={{ fontWeight: 600, fontSize: '0.85rem', color: evt.type === 'Outage' ? '#ef4444' : '#111827' }}>
                                                 {evt.type === 'Start' ? 'Tracking Started' : evt.type}
                                             </span>
                                             {evt.type === 'Drive' && (
-                                                <span style={{ fontSize: '0.75rem', color: '#111827', fontWeight: 600 }}>{evt.dummyKm} km <span style={{ color: '#10b981' }}>{evt.dummyMin}m</span></span>
+                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
+                                                    <span style={{ fontSize: '0.8rem', color: '#111827', fontWeight: 600 }}>{evt.distanceKm} km</span>
+                                                    <span style={{ color: '#10b981', fontSize: '0.8rem', fontWeight: 600 }}>
+                                                        {evt.durationMin >= 60 ? `${Math.floor(evt.durationMin/60)}h ${evt.durationMin%60}m` : `${evt.durationMin}m`}
+                                                    </span>
+                                                </div>
                                             )}
                                             {evt.type === 'Stop' && (
-                                                <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>{evt.duration}m</span>
+                                                <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>
+                                                    {evt.duration >= 60 ? `${Math.floor(evt.duration/60)}h ${evt.duration%60}m` : `${evt.duration}m`}
+                                                </span>
+                                            )}
+                                            {evt.type === 'Outage' && (
+                                                <span style={{ fontSize: '0.8rem', color: '#111827', fontWeight: 600 }}>
+                                                    {evt.durationMin >= 60 ? `${Math.floor(evt.durationMin/60)}h ${evt.durationMin%60}m` : `${evt.durationMin}m`}
+                                                </span>
                                             )}
                                         </div>
-                                        {evt.address && (
-                                            <div style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '4px', lineHeight: '1.4' }}>
+                                        {evt.address && evt.type === 'Stop' && (
+                                            <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '6px', lineHeight: '1.4' }}>
                                                 {evt.address}
                                             </div>
                                         )}
+                                        {evt.type === 'Outage' && evt.message && (
+                                            <div style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '6px', lineHeight: '1.4', background: '#fef2f2', border: '1px solid #fecaca', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
+                                                {evt.message} <i className="ri-error-warning-line" style={{marginLeft: '4px'}}></i>
+                                            </div>
+                                        )}
                                     </div>
+
                                 </div>
                             ))}
                         </div>
                     </div>
 
                     {/* Right Map */}
-                    <div style={{ flex: 1, borderRadius: '12px', overflow: 'hidden', border: '1px solid #e5e7eb', position: 'relative' }}>
+                    <div style={{ flex: 1, borderRadius: '8px', overflow: 'hidden', border: '1px solid #e5e7eb', position: 'relative' }}>
                         {isLoaded ? (
                             <GoogleMap
                                 mapContainerStyle={containerStyle}
@@ -620,31 +723,37 @@ const GeoDashboard = () => {
                                 zoom={12}
                                 onLoad={onTimelineLoad}
                                 onUnmount={onTimelineUnmount}
+                                options={{
+                                    mapTypeControl: false,
+                                    streetViewControl: false,
+                                    fullscreenControl: false,
+                                    zoomControl: false
+                                }}
                             >
                                 {timelineReport && timelineReport.route && timelineReport.route.length > 0 && (
                                     <>
                                         <Polyline
-                                            path={timelineReport.route.map(p => ({ lat: Number(p.lat), lng: Number(p.lng) }))}
-                                            options={{ strokeColor: "#000000", strokeOpacity: 0.8, strokeWeight: 3 }}
+                                            path={getSmoothedPath(timelineReport.route)}
+                                            options={{ strokeColor: "#111827", strokeOpacity: 0.9, strokeWeight: 2 }}
                                         />
                                         <Marker
                                             position={{ lat: Number(timelineReport.route[0].lat), lng: Number(timelineReport.route[0].lng) }}
                                             icon={{
                                                 path: window.google.maps.SymbolPath.CIRCLE,
-                                                scale: 6,
-                                                fillColor: '#000000',
+                                                scale: 5,
+                                                fillColor: '#111827',
                                                 fillOpacity: 1,
                                                 strokeColor: '#ffffff',
                                                 strokeWeight: 2,
                                             }}
-                                            label={{ text: "S", color: "white", fontSize: "9px", fontWeight: "bold" }}
+                                            label={{ text: "S", color: "white", fontSize: "8px", fontWeight: "bold", className: 'marker-label-offset' }}
                                         />
                                         <Marker
                                             position={{ lat: Number(timelineReport.route[timelineReport.route.length-1].lat), lng: Number(timelineReport.route[timelineReport.route.length-1].lng) }}
                                             icon={{
                                                 path: window.google.maps.SymbolPath.CIRCLE,
-                                                scale: 6,
-                                                fillColor: '#000000',
+                                                scale: 5,
+                                                fillColor: '#111827',
                                                 fillOpacity: 1,
                                                 strokeColor: '#ffffff',
                                                 strokeWeight: 2,
@@ -659,18 +768,34 @@ const GeoDashboard = () => {
                             </div>
                         )}
 
+                        {/* Map controls floating */}
+                        <div style={{ position: 'absolute', right: '16px', top: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <button style={{ width: '40px', height: '40px', background: 'white', border: 'none', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#4b5563' }}>
+                                <i className="ri-stack-line" style={{ fontSize: '1.2rem' }}></i>
+                            </button>
+                            <button style={{ width: '40px', height: '40px', background: 'white', border: 'none', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#4b5563' }}>
+                                <i className="ri-fullscreen-line" style={{ fontSize: '1.2rem' }}></i>
+                            </button>
+                        </div>
+                        <div style={{ position: 'absolute', right: '16px', bottom: '80px', display: 'flex', flexDirection: 'column', gap: '0', background: 'white', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+                            <button style={{ width: '40px', height: '40px', background: 'white', border: 'none', borderBottom: '1px solid #f3f4f6', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#4b5563' }}>
+                                <i className="ri-add-line" style={{ fontSize: '1.4rem' }}></i>
+                            </button>
+                            <button style={{ width: '40px', height: '40px', background: 'white', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#4b5563' }}>
+                                <i className="ri-subtract-line" style={{ fontSize: '1.4rem' }}></i>
+                            </button>
+                        </div>
+
                         {/* Bottom Playback Bar overlay */}
-                        <div style={{ position: 'absolute', bottom: '20px', left: '20px', right: '20px', background: 'rgba(255,255,255,0.95)', padding: '12px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-                            <i className="ri-list-check" style={{ color: '#9ca3af', cursor: 'pointer' }}></i>
+                        <div style={{ position: 'absolute', bottom: '24px', left: '24px', width: '300px', background: 'rgba(255,255,255,0.95)', padding: '12px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                            <i className="ri-barcode-line" style={{ color: '#9ca3af', cursor: 'pointer', transform: 'rotate(90deg)', fontSize: '1.1rem' }}></i>
                             <i className="ri-play-circle-line" style={{ color: '#10b981', fontSize: '1.4rem', cursor: 'pointer' }}></i>
-                            <div style={{ flex: 1, height: '4px', background: '#e5e7eb', borderRadius: '2px', position: 'relative' }}>
-                                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '30%', background: '#3b82f6', borderRadius: '2px' }}></div>
-                                <div style={{ position: 'absolute', left: '30%', top: '-4px', width: '12px', height: '12px', background: '#3b82f6', borderRadius: '50%', border: '2px solid white', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }}></div>
-                            </div>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>
-                                {timelineReport && timelineReport.route.length > 0 ? new Date(timelineReport.route[Math.floor(timelineReport.route.length*0.3)].time).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'}) : '00:00 AM'}
+                            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#9ca3af', marginLeft: 'auto' }}>
+                                {timelineReport && timelineReport.route.length > 0 ? new Date(timelineReport.route[Math.floor(timelineReport.route.length*0.3)].time).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'}) : '10:20 AM'}
                             </span>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#6b7280', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>1X <i className="ri-arrow-down-s-line"></i></span>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                                1X <i className="ri-arrow-down-s-line" style={{ marginLeft: '2px' }}></i>
+                            </span>
                         </div>
                     </div>
                 </div>
