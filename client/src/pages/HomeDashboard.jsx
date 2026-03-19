@@ -3,6 +3,7 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import "../styles/HomeDashboard.css";
+import MusterRoll from "./MusterRoll";
 
 export default function HomeDashboard() {
   const [userRole, setUserRole] = useState("");
@@ -413,6 +414,11 @@ function AdminDashboard({ stats: initialStats, trend, recentActivity, navigate, 
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Embedded Muster Roll */}
+      <div className="card" style={{marginTop: '1.5rem', padding: '1rem 0', minHeight: '600px', display: 'flex', flexDirection: 'column'}}>
+        <MusterRoll />
       </div>
     </>
   );

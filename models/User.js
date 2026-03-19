@@ -61,6 +61,14 @@ const UserSchema = new mongoose.Schema({
     isOnline: {
         type: Boolean,
         default: false
+    },
+    employeeId: {
+        type: String,
+        default: ""
+    },
+    isActive: {
+        type: Boolean,
+        default: true
     }
 });
 

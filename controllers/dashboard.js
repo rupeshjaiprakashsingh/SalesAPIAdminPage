@@ -11,8 +11,8 @@ exports.getAdminStats = async (req, res) => {
         const nextDay = new Date(targetDate);
         nextDay.setDate(nextDay.getDate() + 1);
 
-        // Total users count
-        const totalUsers = await User.countDocuments({ role: { $ne: "admin" } }); // Count only staff
+        // Total active users count
+        const totalUsers = await User.countDocuments({ role: { $ne: "admin" }, isActive: { $ne: false } }); // Count only active staff
 
         // Today's attendance - count unique users who marked IN
         const todayIns = await Attendance.aggregate([
@@ -48,7 +48,8 @@ exports.getAdminStats = async (req, res) => {
         const upcomingLeaves = 0;
         const overtimeHours = "0h 0m";
         const fineHours = "0h 0m";
-        const deactivated = 0;
+        const deactivatedCount = await User.countDocuments({ role: { $ne: "admin" }, isActive: false });
+        const deactivated = deactivatedCount;
         const dailyWorkEntries = presentToday + punchedOut; // Approximation for now
 
         res.status(200).json({

@@ -43,14 +43,23 @@ const dashboard = async (req, res) => {
 
 const getAllUsers = async (req, res) => {
   try {
-    const { search, page = 1, limit = 10 } = req.query;
+    const { search, page = 1, limit = 10, status } = req.query;
     const query = {};
 
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: "i" } },
         { email: { $regex: search, $options: "i" } },
+        { employeeId: { $regex: search, $options: "i" } },
       ];
+    }
+    
+    if (status === 'deactivated') {
+      query.isActive = false;
+    } else if (status === 'all') {
+      // no filter
+    } else {
+      query.isActive = { $ne: false }; // active
     }
 
     const users = await User.find(query)
@@ -86,7 +95,7 @@ const getUserById = async (req, res) => {
 
 const createUser = async (req, res) => {
   try {
-    const { name, username, email, password, role, mobileNumber, dateOfBirth } = req.body;
+    const { name, username, email, password, role, mobileNumber, dateOfBirth, employeeId, isActive } = req.body;
     if (!name || !username || !email || !password || !mobileNumber || !dateOfBirth) {
       return res.status(400).json({ msg: "Please provide all fields including username, mobile, and DOB" });
     }
@@ -101,16 +110,21 @@ const createUser = async (req, res) => {
       return res.status(400).json({ msg: "Username already in use" });
     }
 
-    const user = await User.create({ name, username, email, password, mobileNumber, dateOfBirth, role: role || "user" });
+    const user = await User.create({ name, username, email, password, mobileNumber, dateOfBirth, role: role || "user", employeeId: employeeId || "", isActive: isActive !== undefined ? isActive : true });
     res.status(201).json({ user });
   } catch (error) {
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyValue || {})[0] || 'A unique field';
+      const formattedField = field === 'mobileNumber' ? 'Mobile Number' : (field.charAt(0).toUpperCase() + field.slice(1));
+      return res.status(400).json({ msg: `${formattedField} is already in use. Please select a different one.` });
+    }
     res.status(500).json({ msg: error.message });
   }
 };
 
 const updateUser = async (req, res) => {
   try {
-    const { name, username, email, password, role, mobileNumber, dateOfBirth } = req.body;
+    const { name, username, email, password, role, mobileNumber, dateOfBirth, employeeId, isActive } = req.body;
     const user = await User.findById(req.params.id);
 
     if (!user) {
@@ -123,6 +137,8 @@ const updateUser = async (req, res) => {
     user.role = role || user.role;
     user.mobileNumber = mobileNumber || user.mobileNumber;
     user.dateOfBirth = dateOfBirth || user.dateOfBirth;
+    if (employeeId !== undefined) user.employeeId = employeeId;
+    if (isActive !== undefined) user.isActive = isActive;
     if (password) {
       user.password = password; // Will be hashed by pre-save hook
     }
@@ -130,6 +146,11 @@ const updateUser = async (req, res) => {
     await user.save();
     res.status(200).json({ user });
   } catch (error) {
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyValue || {})[0] || 'A unique field';
+      const formattedField = field === 'mobileNumber' ? 'Mobile Number' : (field.charAt(0).toUpperCase() + field.slice(1));
+      return res.status(400).json({ msg: `${formattedField} is already in use. Please select a different one.` });
+    }
     res.status(500).json({ msg: error.message });
   }
 };
@@ -174,7 +195,17 @@ const register = async (req, res) => {
     mobileNumber,
     dateOfBirth
   });
-  await person.save();
+  
+  try {
+    await person.save();
+  } catch (error) {
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyValue || {})[0] || 'A unique field';
+      const formattedField = field === 'mobileNumber' ? 'Mobile Number' : (field.charAt(0).toUpperCase() + field.slice(1));
+      return res.status(400).json({ msg: `${formattedField} is already in use. Please select a different one.` });
+    }
+    return res.status(500).json({ msg: error.message });
+  }
 
   // Send Welcome Email
   try {
@@ -244,6 +275,11 @@ module.exports = {
       await user.save();
       res.status(200).json({ msg: "Profile updated successfully", user });
     } catch (error) {
+      if (error.code === 11000) {
+        const field = Object.keys(error.keyValue || {})[0] || 'A unique field';
+        const formattedField = field === 'mobileNumber' ? 'Mobile Number' : (field.charAt(0).toUpperCase() + field.slice(1));
+        return res.status(400).json({ msg: `${formattedField} is already in use. Please select a different one.` });
+      }
       res.status(500).json({ msg: error.message });
     }
   },

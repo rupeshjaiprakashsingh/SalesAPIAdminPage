@@ -12,11 +12,12 @@ const NAV_ITEMS_COMMON = [
 ];
 
 const NAV_ITEMS_ADMIN = [
+  { to: "/dashboard/geo", label: "Geo Dashboard", icon: "ri-map-pin-user-line" },
   { to: "/dashboard/users", label: "Staff Management", icon: "ri-team-line" },
+  { to: "/dashboard/customers", label: "Customers", icon: "ri-user-star-line" },
   { to: "/dashboard/live-tracking", label: "Live Tracking", icon: "ri-map-2-line" },
   { to: "/dashboard/timeline-report", label: "Timeline Report", icon: "ri-time-line" },
   { to: "/dashboard/calendar-report", label: "Calendar Report", icon: "ri-calendar-event-line" },
-  { to: "/dashboard/muster-roll", label: "Attendance Muster Roll", icon: "ri-file-list-3-line" },
 ];
 
 const Dashboard = () => {

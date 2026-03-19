@@ -42,7 +42,7 @@ export default function MusterRoll() {
     const handleDownload = async () => {
         try {
             const res = await axios.get(
-                `/api/v1/reports/monthly-excel?year=${selectedYear}&month=${selectedMonth}`,
+                `/api/v1/reports/export-excel?year=${selectedYear}&month=${selectedMonth}`,
                 { 
                     headers: { Authorization: `Bearer ${token}` },
                     responseType: 'blob' 

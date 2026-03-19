@@ -1,0 +1,314 @@
+.geo-dashboard {
+  padding: 20px;
+  background-color: #ffffff;
+  min-height: 100vh;
+  font-family: 'Inter', -apple-system, sans-serif;
+  color: #1a202c;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Base icon colors */
+.text-green { color: #10b981; }
+.text-purple { color: #8b5cf6; }
+.text-pink { color: #ec4899; }
+.text-blue { color: #3b82f6; }
+
+/* Top Banner */
+.geo-banner {
+  background-color: #ffedd5;
+  color: #c2410c;
+  padding: 12px 20px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: flex-end; /* Align right */
+  align-items: center;
+  position: relative;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+.geo-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-right: 48px; /* space for close button */
+}
+.geo-banner-btn {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.geo-banner-btn:hover {
+  opacity: 0.9;
+}
+.geo-banner-close {
+  position: absolute;
+  right: 12px;
+  background: #fdba74;
+  color: #c2410c;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+/* Header */
+.geo-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  color: #111827;
+}
+
+/* Cards Grid */
+.geo-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.geo-card {
+  background: #fdfdfd;
+  border: 1px solid #f3f4f6;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+.geo-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.geo-card-title {
+  color: #6b7280;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.geo-card-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #111827;
+}
+.geo-card-icon {
+  font-size: 1.5rem;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.geo-card:nth-child(1) { border-left: 2px solid #10b981; }
+.geo-card:nth-child(2) { border-left: 2px solid #8b5cf6; }
+.geo-card:nth-child(3) { border-left: 2px solid #ec4899; }
+.geo-card:nth-child(4) { border-left: 2px solid #3b82f6; }
+
+
+/* Middle Section */
+.geo-middle-section {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  gap: 16px;
+}
+
+/* Orders Overview */
+.geo-orders-overview {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+.geo-orders-overview h3 {
+  font-size: 1.05rem;
+  margin: 0 0 20px 0;
+  font-weight: 600;
+  color: #111827;
+}
+.geo-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  font-size: 0.9rem;
+}
+.geo-empty-box {
+  background: #10b981;
+  color: white;
+  font-size: 2rem;
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  position: relative;
+}
+.geo-question-mark {
+  position: absolute;
+  color: white;
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
+/* Customers Overview */
+.geo-customers-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.geo-customers-overview h3 {
+  font-size: 1.05rem;
+  margin: 0;
+  font-weight: 600;
+  color: #111827;
+}
+.geo-customer-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.geo-customer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.geo-customer-title {
+  color: #6b7280;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.geo-customer-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+}
+.geo-customer-trend {
+  color: #ef4444; /* red for less */
+  font-size: 0.75rem;
+  background: #fef2f2;
+  padding: 4px 8px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  font-weight: 500;
+}
+.customer-icon {
+  background: #f9fafb;
+  padding: 6px;
+  border-radius: 8px;
+  font-size: 1.2rem;
+}
+
+/* Bottom Chart */
+.geo-orders-received {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+}
+.geo-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 30px;
+}
+.geo-chart-header h3 {
+  margin: 0 0 6px 0;
+  font-size: 1.1rem;
+  color: #111827;
+}
+.geo-chart-header p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+.geo-chart-filters {
+  display: flex;
+  gap: 12px;
+}
+.geo-filter-box {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  color: #4b5563;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.geo-chart-body {
+  display: flex;
+  height: 200px;
+  border-top: 1px solid #f3f4f6;
+  border-bottom: 1px solid #f3f4f6;
+  padding: 20px 0;
+  position: relative;
+}
+.geo-chart-y-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #9ca3af;
+  font-size: 0.75rem;
+  padding-right: 16px;
+}
+.geo-chart-bars {
+  flex: 1;
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-end;
+}
+.geo-bar-wrapper {
+  width: 100px;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+.geo-bar {
+  width: 100%;
+  background: #e0e7ff;
+}
+
+@media (max-width: 1100px) {
+  .geo-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .geo-middle-section {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .geo-cards-grid {
+    grid-template-columns: 1fr;
+  }
+  .geo-chart-filters {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

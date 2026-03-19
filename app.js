@@ -38,6 +38,7 @@ app.use("/api/v1/enquiry", require("./routes/enquiry")); // Public API for enqui
 app.use("/api/v1/geofence", require("./routes/geofence"));
 app.use("/api/v1/location", require("./routes/location"));
 app.use("/api/v1/tracking", require("./routes/trackingRoutes"));
+app.use("/api/v1/customers", require("./routes/customers"));
 
 const port = process.env.PORT || 3000;
 

@@ -811,3 +811,107 @@ exports.getCalendarReport = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// Get Dashboard Stats (All Users Total Distances/Times)
+exports.getDashboardStats = async (req, res) => {
+    try {
+        const { date } = req.query;
+        if (!date) {
+            return res.status(400).json({ message: "Date is required" });
+        }
+
+        const startOfDay = new Date(date);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const EmployeeLocationLog = require("../models/EmployeeLocationLog");
+        const { calculateDistance } = require("../utils/geoFence");
+
+        // Fetch all active tracking users
+        const allUsers = await User.find().select("name employeeId email").lean();
+        
+        // Fetch all logs for the day
+        const logs = await EmployeeLocationLog.find({
+            timestamp: { $gte: startOfDay, $lte: endOfDay }
+        }).sort({ timestamp: 1 }).lean();
+
+        // Group logs by employeeId
+        const logsByUser = {};
+        logs.forEach(log => {
+            const empId = log.employeeId.toString();
+            if (!logsByUser[empId]) logsByUser[empId] = [];
+            logsByUser[empId].push(log);
+        });
+
+        const DISTANCE_THRESHOLD = 20; // meters (to consider motion)
+        const userStats = [];
+
+        // Aggregate Top level metrics
+        let systemTotalDistance = 0;
+        let systemMotionTime = 0;
+        let systemIdleTime = 0;
+
+        allUsers.forEach(user => {
+            const userLogs = logsByUser[user._id.toString()] || [];
+            let totalDistance = 0; // meters
+            let idleTime = 0; // minutes
+            let motionTime = 0; // minutes
+            
+            if (userLogs.length > 1) {
+                let previousLog = userLogs[0];
+                for (let i = 1; i < userLogs.length; i++) {
+                    const currentLog = userLogs[i];
+                    const dist = calculateDistance(
+                        previousLog.latitude, previousLog.longitude,
+                        currentLog.latitude, currentLog.longitude
+                    );
+                    const timeDiff = new Date(currentLog.timestamp) - new Date(previousLog.timestamp);
+                    const timeDiffMin = timeDiff / (1000 * 60);
+
+                    if (dist > DISTANCE_THRESHOLD) {
+                        totalDistance += dist;
+                        motionTime += timeDiffMin;
+                    } else {
+                        idleTime += timeDiffMin;
+                    }
+                    previousLog = currentLog;
+                }
+            }
+
+            const finalDistanceKm = (totalDistance / 1000).toFixed(2);
+            const totalTime = Math.round(idleTime + motionTime);
+            
+            systemTotalDistance += parseFloat(finalDistanceKm);
+            systemMotionTime += Math.round(motionTime);
+            systemIdleTime += Math.round(idleTime);
+
+            userStats.push({
+                _id: user._id,
+                name: user.name,
+                employeeId: user.employeeId || "",
+                totalDistance: finalDistanceKm, // km
+                totalTime: totalTime, // minutes
+                motionTime: Math.round(motionTime), // minutes
+                idleTime: Math.round(idleTime) // minutes
+            });
+        });
+
+        res.status(200).json({
+            success: true,
+            date: date,
+            summary: {
+                totalDistance: systemTotalDistance.toFixed(2),
+                totalTime: systemMotionTime + systemIdleTime,
+                totalMotionTime: systemMotionTime,
+                totalIdleTime: systemIdleTime
+            },
+            data: userStats
+        });
+
+    } catch (error) {
+        console.error("Dashboard stats error:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
