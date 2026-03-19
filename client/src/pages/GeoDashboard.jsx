@@ -515,12 +515,17 @@ const GeoDashboard = () => {
                     ))}
                     {selectedEmp && (
                         <>
-                            {userRoute && userRoute.length > 0 && (
-                                <Polyline
-                                    path={userRoute.map(p => ({ lat: Number(p.lat), lng: Number(p.lng) }))}
-                                    options={{ strokeColor: "#3b82f6", strokeOpacity: 0.85, strokeWeight: 4 }}
-                                />
-                            )}
+                            {userRoute && userRoute.length > 0 && (() => {
+                                const validPath = userRoute
+                                    .map(p => ({ lat: Number(p.lat), lng: Number(p.lng) }))
+                                    .filter(p => !isNaN(p.lat) && !isNaN(p.lng) && p.lat !== 0 && p.lng !== 0);
+                                return validPath.length > 1 ? (
+                                    <Polyline
+                                        path={validPath}
+                                        options={{ strokeColor: "#3b82f6", strokeOpacity: 0.85, strokeWeight: 4 }}
+                                    />
+                                ) : null;
+                            })()}
                             <Marker
                                 position={{ lat: selectedEmp.latitude, lng: selectedEmp.longitude }}
                                 icon={{
@@ -570,13 +575,34 @@ const GeoDashboard = () => {
 
         const getSmoothedPath = (route) => {
              if (!route || route.length === 0) return [];
-             const smoothed = [{ lat: Number(route[0].lat), lng: Number(route[0].lng) }];
-             for (let i = 1; i < route.length; i++) {
-                 const pt = route[i];
-                 const dist = calcDistMeters(smoothed[smoothed.length-1].lat, smoothed[smoothed.length-1].lng, Number(pt.lat), Number(pt.lng));
-                 if (dist > 15) { // Filter out <15m jumps to stop visual spider webbing
-                     smoothed.push({ lat: Number(pt.lat), lng: Number(pt.lng) });
+             // Filter out invalid coordinates first
+             const validRoute = route.filter(p => p.lat != null && p.lng != null && !isNaN(Number(p.lat)) && !isNaN(Number(p.lng)));
+             if (validRoute.length === 0) return [];
+
+             // Defense-in-depth: server already cleans data, but apply a final pass
+             // to remove any remaining visual jitter or outliers
+             const smoothed = [{ lat: Number(validRoute[0].lat), lng: Number(validRoute[0].lng), time: validRoute[0].time }];
+             for (let i = 1; i < validRoute.length; i++) {
+                 const pt = validRoute[i];
+                 const last = smoothed[smoothed.length - 1];
+                 const lat = Number(pt.lat), lng = Number(pt.lng);
+                 const dist = calcDistMeters(last.lat, last.lng, lat, lng);
+
+                 // Speed sanity check: reject impossible jumps (> ~150 km/h)
+                 if (pt.time && last.time) {
+                     const elapsedSec = (new Date(pt.time) - new Date(last.time)) / 1000;
+                     if (elapsedSec > 0 && dist / elapsedSec > 42) continue; // ~150 km/h max
                  }
+
+                 if (dist > 25) { // 25m threshold — removes idle jitter while keeping real movement
+                     smoothed.push({ lat, lng, time: pt.time });
+                 }
+             }
+             // Always include last point
+             const lastPt = validRoute[validRoute.length - 1];
+             const lastSmoothed = smoothed[smoothed.length - 1];
+             if (lastSmoothed.lat !== Number(lastPt.lat) || lastSmoothed.lng !== Number(lastPt.lng)) {
+                 smoothed.push({ lat: Number(lastPt.lat), lng: Number(lastPt.lng), time: lastPt.time });
              }
              return smoothed;
         };
@@ -730,10 +756,12 @@ const GeoDashboard = () => {
                                     zoomControl: false
                                 }}
                             >
-                                {timelineReport && timelineReport.route && timelineReport.route.length > 0 && (
+                                {timelineReport && timelineReport.route && timelineReport.route.length > 0 && (() => {
+                                    const smoothedPath = getSmoothedPath(timelineReport.route);
+                                    return smoothedPath.length > 1 ? (
                                     <>
                                         <Polyline
-                                            path={getSmoothedPath(timelineReport.route)}
+                                            path={smoothedPath}
                                             options={{ strokeColor: "#111827", strokeOpacity: 0.9, strokeWeight: 2 }}
                                         />
                                         <Marker
@@ -760,7 +788,7 @@ const GeoDashboard = () => {
                                             }}
                                         />
                                     </>
-                                )}
+                                ) : null;})()}
                             </GoogleMap>
                         ) : (
                             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", background: "#f3f4f6", color: "#6b7280" }}>

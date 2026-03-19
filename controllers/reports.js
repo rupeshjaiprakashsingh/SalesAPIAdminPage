@@ -629,18 +629,82 @@ exports.getTimelineReport = async (req, res) => {
         // Thresholds
         const DISTANCE_THRESHOLD = 20; // meters (to consider motion)
         const TIME_THRESHOLD_IDLE = 5 * 60 * 1000; // 5 minutes in ms
+        const ACCURACY_THRESHOLD = 50; // meters — reject noisy GPS fixes
+        const JITTER_THRESHOLD = 10;   // meters — minimum meaningful movement
 
-        // Construct Route Path
-        const route = logs.map(log => ({
-            lat: log.latitude,
-            lng: log.longitude,
-            time: log.timestamp,
-            battery: log.battery,
-            accuracy: log.accuracy
-        }));
+        // ─── STEP 1: Filter out noisy GPS fixes ─────────────────────────
+        const cleanLogs = logs.filter(log => {
+            // Remove points with very poor accuracy
+            if (log.accuracy && log.accuracy > ACCURACY_THRESHOLD) return false;
+            // Remove invalid coordinates
+            if (!log.latitude || !log.longitude) return false;
+            return true;
+        });
 
-        for (let i = 1; i < logs.length; i++) {
-            const currentLog = logs[i];
+        if (cleanLogs.length === 0) {
+            return res.status(200).json({
+                success: true,
+                data: {
+                    employeeId: userId, date,
+                    totalDistance: 0, idleTime: 0, motionTime: 0,
+                    stopDetails: [], route: []
+                }
+            });
+        }
+
+        // ─── STEP 2: Remove stationary jitter (dedup nearby points) ─────
+        const dedupedLogs = [cleanLogs[0]];
+        for (let i = 1; i < cleanLogs.length; i++) {
+            const prev = dedupedLogs[dedupedLogs.length - 1];
+            const curr = cleanLogs[i];
+            const dist = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+            const elapsed = new Date(curr.timestamp) - new Date(prev.timestamp);
+
+            // Keep point if: moved enough OR enough time has passed (heartbeat)
+            if (dist >= JITTER_THRESHOLD || elapsed >= 5 * 60 * 1000) {
+                dedupedLogs.push(curr);
+            }
+        }
+        // Always include the last point for accurate timeline end
+        if (dedupedLogs[dedupedLogs.length - 1] !== cleanLogs[cleanLogs.length - 1]) {
+            dedupedLogs.push(cleanLogs[cleanLogs.length - 1]);
+        }
+
+        // ─── STEP 3: Ramer-Douglas-Peucker path simplification ─────────
+        // Industry standard (used by Google Maps, Strava, Mapbox)
+        // Reduces visual complexity while preserving the route's true shape.
+        function perpendicularDistance(point, lineStart, lineEnd) {
+            const x0 = point.latitude, y0 = point.longitude;
+            const x1 = lineStart.latitude, y1 = lineStart.longitude;
+            const x2 = lineEnd.latitude, y2 = lineEnd.longitude;
+            const num = Math.abs((y2 - y1) * x0 - (x2 - x1) * y0 + x2 * y1 - y2 * x1);
+            const den = Math.sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2);
+            // Convert lat/lng degree distance to approximate meters 
+            return den === 0 ? 0 : (num / den) * 111320;
+        }
+
+        function rdpSimplify(points, epsilon) {
+            if (points.length <= 2) return points;
+            let maxDist = 0, maxIdx = 0;
+            for (let i = 1; i < points.length - 1; i++) {
+                const d = perpendicularDistance(points[i], points[0], points[points.length - 1]);
+                if (d > maxDist) { maxDist = d; maxIdx = i; }
+            }
+            if (maxDist > epsilon) {
+                const left = rdpSimplify(points.slice(0, maxIdx + 1), epsilon);
+                const right = rdpSimplify(points.slice(maxIdx), epsilon);
+                return left.slice(0, -1).concat(right);
+            }
+            return [points[0], points[points.length - 1]];
+        }
+
+        // Epsilon of 15m simplifies minor wiggles but keeps turns/direction changes
+        const simplifiedLogs = rdpSimplify(dedupedLogs, 15);
+
+        // ─── STEP 4: Compute stats from the deduped (not simplified) data ─
+        previousLog = dedupedLogs[0];
+        for (let i = 1; i < dedupedLogs.length; i++) {
+            const currentLog = dedupedLogs[i];
 
             const dist = calculateDistance(
                 previousLog.latitude, previousLog.longitude,
@@ -671,6 +735,15 @@ exports.getTimelineReport = async (req, res) => {
             previousLog = currentLog;
         }
 
+        // ─── STEP 5: Build clean route from simplified data ────────────
+        const route = simplifiedLogs.map(log => ({
+            lat: log.latitude,
+            lng: log.longitude,
+            time: log.timestamp,
+            battery: log.battery,
+            accuracy: log.accuracy
+        }));
+
         // Format Result
         const summary = {
             employeeId: userId,
@@ -679,7 +752,7 @@ exports.getTimelineReport = async (req, res) => {
             idleTime: Math.round(idleTime),
             motionTime: Math.round(motionTime),
             stopDetails,
-            route // Return route points for mapping
+            route // Return cleaned route points for mapping
         };
 
         res.status(200).json({
@@ -845,6 +918,8 @@ exports.getDashboardStats = async (req, res) => {
         });
 
         const DISTANCE_THRESHOLD = 20; // meters (to consider motion)
+        const ACCURACY_THRESHOLD = 50; // meters — reject noisy GPS fixes
+        const JITTER_THRESHOLD = 10;   // meters — minimum meaningful movement
         const userStats = [];
 
         // Aggregate Top level metrics
@@ -853,15 +928,34 @@ exports.getDashboardStats = async (req, res) => {
         let systemIdleTime = 0;
 
         allUsers.forEach(user => {
-            const userLogs = logsByUser[user._id.toString()] || [];
+            const rawLogs = logsByUser[user._id.toString()] || [];
             let totalDistance = 0; // meters
             let idleTime = 0; // minutes
             let motionTime = 0; // minutes
+
+            // Apply same filtering as timeline report for consistent numbers
+            const userLogs = rawLogs.filter(log => {
+                if (log.accuracy && log.accuracy > ACCURACY_THRESHOLD) return false;
+                if (!log.latitude || !log.longitude) return false;
+                return true;
+            });
+
+            // Deduplicate jitter
+            const dedupedLogs = userLogs.length > 0 ? [userLogs[0]] : [];
+            for (let i = 1; i < userLogs.length; i++) {
+                const prev = dedupedLogs[dedupedLogs.length - 1];
+                const curr = userLogs[i];
+                const dist = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+                const elapsed = new Date(curr.timestamp) - new Date(prev.timestamp);
+                if (dist >= JITTER_THRESHOLD || elapsed >= 5 * 60 * 1000) {
+                    dedupedLogs.push(curr);
+                }
+            }
             
-            if (userLogs.length > 1) {
-                let previousLog = userLogs[0];
-                for (let i = 1; i < userLogs.length; i++) {
-                    const currentLog = userLogs[i];
+            if (dedupedLogs.length > 1) {
+                let previousLog = dedupedLogs[0];
+                for (let i = 1; i < dedupedLogs.length; i++) {
+                    const currentLog = dedupedLogs[i];
                     const dist = calculateDistance(
                         previousLog.latitude, previousLog.longitude,
                         currentLog.latitude, currentLog.longitude
