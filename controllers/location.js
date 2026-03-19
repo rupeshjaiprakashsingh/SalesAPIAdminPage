@@ -52,48 +52,30 @@ exports.logLocation = async (req, res) => {
 exports.logLocationBatch = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { points } = req.body;
+        // Support both { points: [...] } OR the raw array [...]
+        let points = req.body.points || req.body;
 
         if (!points || !Array.isArray(points) || points.length === 0) {
             return res.status(400).json({ success: false, message: "Missing or invalid points array" });
         }
 
-        const user = await User.findById(userId);
-        let lastLat = user?.lastLocation?.lat;
-        let lastLng = user?.lastLocation?.lng;
-
-        const preparedLogs = [];
-        let skipped = 0;
-
-        for (const pt of points) {
-            // Filter movement < 2m to ensure we only save valuable path data
-            const distance = getDistanceFromLatLonInM(lastLat, lastLng, pt.latitude, pt.longitude);
-            if (distance >= 2.0 || !lastLat) {
-                preparedLogs.push({
-                    employeeId: userId,
-                    latitude: pt.latitude,
-                    longitude: pt.longitude,
-                    accuracy: pt.accuracy,
-                    speed: pt.speed,
-                    battery: pt.battery,
-                    timestamp: new Date(pt.timestamp)
-                });
-                lastLat = pt.latitude;
-                lastLng = pt.longitude;
-            } else {
-                skipped++;
-            }
-        }
+        const preparedLogs = points.map(pt => ({
+            employeeId: userId,
+            latitude: pt.latitude,
+            longitude: pt.longitude,
+            accuracy: pt.accuracy,
+            speed: pt.speed,
+            battery: pt.battery,
+            timestamp: pt.timestamp ? new Date(pt.timestamp) : new Date()
+        }));
 
         if (preparedLogs.length > 0) {
             await EmployeeLocationLog.insertMany(preparedLogs);
+            
+            // Latest point update
             const lastPoint = preparedLogs[preparedLogs.length - 1];
             await User.findByIdAndUpdate(userId, {
-                lastLocation: {
-                    lat: lastPoint.latitude,
-                    lng: lastPoint.longitude,
-                    timestamp: lastPoint.timestamp
-                },
+                lastLocation: { lat: lastPoint.latitude, lng: lastPoint.longitude, timestamp: lastPoint.timestamp },
                 batteryStatus: lastPoint.battery,
                 isOnline: true
             });
@@ -101,9 +83,8 @@ exports.logLocationBatch = async (req, res) => {
 
         res.status(200).json({ 
             success: true, 
-            message: `Batch processed: ${preparedLogs.length} saved, ${skipped} skipped`,
-            saved: preparedLogs.length,
-            skipped: skipped
+            message: `Batch processed: ${preparedLogs.length} saved`,
+            saved: preparedLogs.length
         });
     } catch (error) {
         console.error("Batch log error:", error);
