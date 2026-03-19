@@ -59,15 +59,21 @@ exports.logLocationBatch = async (req, res) => {
             return res.status(400).json({ success: false, message: "Missing or invalid points array" });
         }
 
-        const preparedLogs = points.map(pt => ({
-            employeeId: userId,
-            latitude: pt.latitude,
-            longitude: pt.longitude,
-            accuracy: pt.accuracy,
-            speed: pt.speed,
-            battery: pt.battery,
-            timestamp: pt.timestamp ? new Date(pt.timestamp) : new Date()
-        }));
+        const preparedLogs = points.map(pt => {
+            // Support both 'latitude' and 'lat' naming schemes
+            const lat = pt.latitude !== undefined ? pt.latitude : pt.lat;
+            const lng = pt.longitude !== undefined ? pt.longitude : pt.lng;
+
+            return {
+                employeeId: userId,
+                latitude: Number(lat),
+                longitude: Number(lng),
+                accuracy: pt.accuracy,
+                speed: pt.speed,
+                battery: pt.battery,
+                timestamp: pt.timestamp ? new Date(pt.timestamp) : new Date()
+            };
+        }).filter(log => !isNaN(log.latitude) && !isNaN(log.longitude));
 
         if (preparedLogs.length > 0) {
             await EmployeeLocationLog.insertMany(preparedLogs);
