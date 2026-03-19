@@ -14,11 +14,9 @@ function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
     return R * c; // Distance in meters
 }
 
-// Log new location (High frequency)
-// userId is taken from JWT token (req.user.id), NOT from request body — security fix
+// Legacy Log single location (High frequency)
 exports.logLocation = async (req, res) => {
     try {
-        // Always use the authenticated user's ID from JWT
         const userId = req.user.id;
         const { latitude, longitude, accuracy, battery, batteryPercentage } = req.body;
         const finalBattery = battery !== undefined ? battery : batteryPercentage;
@@ -28,8 +26,6 @@ exports.logLocation = async (req, res) => {
         }
 
         const now = new Date();
-
-        // Always log every ping for live tracking (no movement filter)
         await EmployeeLocationLog.create({
             employeeId: userId,
             latitude,
@@ -39,13 +35,8 @@ exports.logLocation = async (req, res) => {
             timestamp: now
         });
 
-        // Update user's last known location and online status
         await User.findByIdAndUpdate(userId, {
-            lastLocation: {
-                lat: latitude,
-                lng: longitude,
-                timestamp: now
-            },
+            lastLocation: { lat: latitude, lng: longitude, timestamp: now },
             batteryStatus: finalBattery,
             isOnline: true
         });
@@ -57,38 +48,78 @@ exports.logLocation = async (req, res) => {
     }
 };
 
-// Get Live User Locations (Latest ping per user from EmployeeLocationLog)
-// Only staff with a ping in the last 30 minutes are considered "online"
+// Log Batch locations (Many points at once — Industry Standard)
+exports.logLocationBatch = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { points } = req.body;
+
+        if (!points || !Array.isArray(points) || points.length === 0) {
+            return res.status(400).json({ success: false, message: "Missing or invalid points array" });
+        }
+
+        const user = await User.findById(userId);
+        let lastLat = user?.lastLocation?.lat;
+        let lastLng = user?.lastLocation?.lng;
+
+        const preparedLogs = [];
+        let skipped = 0;
+
+        for (const pt of points) {
+            // Filter movement < 2m to ensure we only save valuable path data
+            const distance = getDistanceFromLatLonInM(lastLat, lastLng, pt.latitude, pt.longitude);
+            if (distance >= 2.0 || !lastLat) {
+                preparedLogs.push({
+                    employeeId: userId,
+                    latitude: pt.latitude,
+                    longitude: pt.longitude,
+                    accuracy: pt.accuracy,
+                    speed: pt.speed,
+                    battery: pt.battery,
+                    timestamp: new Date(pt.timestamp)
+                });
+                lastLat = pt.latitude;
+                lastLng = pt.longitude;
+            } else {
+                skipped++;
+            }
+        }
+
+        if (preparedLogs.length > 0) {
+            await EmployeeLocationLog.insertMany(preparedLogs);
+            const lastPoint = preparedLogs[preparedLogs.length - 1];
+            await User.findByIdAndUpdate(userId, {
+                lastLocation: {
+                    lat: lastPoint.latitude,
+                    lng: lastPoint.longitude,
+                    timestamp: lastPoint.timestamp
+                },
+                batteryStatus: lastPoint.battery,
+                isOnline: true
+            });
+        }
+
+        res.status(200).json({ 
+            success: true, 
+            message: `Batch processed: ${preparedLogs.length} saved, ${skipped} skipped`,
+            saved: preparedLogs.length,
+            skipped: skipped
+        });
+    } catch (error) {
+        console.error("Batch log error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Get Live User Locations (Latest ping per user)
 exports.getLiveLocations = async (req, res) => {
     try {
         const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-
         const pipeline = [
-            // 1. Only consider pings from last 30 minutes for freshness
-            // (We still show all staff but mark online/offline based on recency)
             { $sort: { timestamp: -1 } },
-
-            // 2. Group by user to get ONLY the latest ping per user
-            {
-                $group: {
-                    _id: "$employeeId",
-                    latestLog: { $first: "$$ROOT" }
-                }
-            },
-
-            // 3. Join user info from User collection
-            {
-                $lookup: {
-                    from: "users",
-                    localField: "_id",
-                    foreignField: "_id",
-                    as: "userDetails"
-                }
-            },
-            // Skip users that no longer exist in User collection
-            { $unwind: { path: "$userDetails", preserveNullAndEmptyArrays: false } },
-
-            // 4. Project clean response
+            { $group: { _id: "$employeeId", latestLog: { $first: "$$ROOT" } } },
+            { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "userDetails" } },
+            { $unwind: "$userDetails" },
             {
                 $project: {
                     _id: 0,
@@ -99,58 +130,37 @@ exports.getLiveLocations = async (req, res) => {
                     longitude: "$latestLog.longitude",
                     lastSeen: "$latestLog.timestamp",
                     battery: "$latestLog.battery",
-                    // isOnline: true if last ping was within 30 minutes
-                    isOnline: {
-                        $gte: ["$latestLog.timestamp", thirtyMinutesAgo]
-                    },
+                    isOnline: { $gte: ["$latestLog.timestamp", thirtyMinutesAgo] },
                     accuracy: "$latestLog.accuracy"
                 }
             },
-
-            // 5. Sort: online staff first, then by lastSeen
             { $sort: { isOnline: -1, lastSeen: -1 } }
         ];
 
         const locations = await EmployeeLocationLog.aggregate(pipeline);
-
-        res.status(200).json({
-            success: true,
-            count: locations.length,
-            onlineCount: locations.filter(l => l.isOnline).length,
-            data: locations
-        });
-
+        res.status(200).json({ success: true, count: locations.length, data: locations });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-// Get Location History for a Specific User and Date (Where they reached)
+// Get Location History for a Specific User and Date
 exports.getUserHistory = async (req, res) => {
     try {
-        const { userId, date } = req.query; // date should be 'YYYY-MM-DD'
-
-        if (!userId || !date) {
-            return res.status(400).json({ success: false, message: "Please provide userId and date (YYYY-MM-DD)" });
-        }
+        const { userId, date } = req.query; // date: 'YYYY-MM-DD'
+        if (!userId || !date) return res.status(400).json({ success: false, message: "Please provide userId and date" });
 
         const startOfDay = new Date(date);
-        startOfDay.setUTCHours(0, 0, 0, 0);
-
+        startOfDay.setUTCHours(0,0,0,0);
         const endOfDay = new Date(date);
-        endOfDay.setUTCHours(23, 59, 59, 999);
+        endOfDay.setUTCHours(23,59,59,999);
 
         const logs = await EmployeeLocationLog.find({
             employeeId: userId,
-            timestamp: {
-                $gte: startOfDay,
-                $lte: endOfDay
-            }
-        }).sort({ timestamp: 1 }); // Sort by time to show the path
+            timestamp: { $gte: startOfDay, $lte: endOfDay }
+        }).sort({ timestamp: 1 });
 
-        // Fetch User Details to include in response
         const user = await User.findById(userId).select("name email");
-
         res.status(200).json({
             success: true,
             user: user,
@@ -163,7 +173,6 @@ exports.getUserHistory = async (req, res) => {
                 battery: log.battery
             }))
         });
-
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
