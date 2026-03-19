@@ -29,60 +29,28 @@ exports.logLocation = async (req, res) => {
 
         const now = new Date();
 
-        // Check if user has moved significantly
-        const user = await User.findById(userId);
-        let shouldLog = true;
+        // Always log every ping for live tracking (no movement filter)
+        await EmployeeLocationLog.create({
+            employeeId: userId,
+            latitude,
+            longitude,
+            accuracy,
+            battery: finalBattery,
+            timestamp: now
+        });
 
-        if (user && user.lastLocation && user.lastLocation.lat && user.lastLocation.lng) {
-            // 1. Check exact match
-            if (user.lastLocation.lat === latitude && user.lastLocation.lng === longitude) {
-                shouldLog = false;
-            } else {
-                // 2. Check distance (GPS drift limit)
-                const distance = getDistanceFromLatLonInM(
-                    user.lastLocation.lat, user.lastLocation.lng,
-                    latitude, longitude
-                );
-                
-                // If distance is less than 15 meters, consider them idle
-                if (distance < 15) {
-                    shouldLog = false;
-                }
-            }
-        }
-
-        if (shouldLog) {
-            // 1. Save new ping
-            await EmployeeLocationLog.create({
-                employeeId: userId,
-                latitude,
-                longitude,
-                accuracy,
-                battery: finalBattery,
+        // Update user's last known location and online status
+        await User.findByIdAndUpdate(userId, {
+            lastLocation: {
+                lat: latitude,
+                lng: longitude,
                 timestamp: now
-            });
+            },
+            batteryStatus: finalBattery,
+            isOnline: true
+        });
 
-            // 2. Update anchor lat/lng so future distances map correctly
-            await User.findByIdAndUpdate(userId, {
-                lastLocation: {
-                    lat: latitude,
-                    lng: longitude,
-                    timestamp: now
-                },
-                batteryStatus: finalBattery,
-                isOnline: true
-            });
-        } else {
-            // 2. They are idle: DO NOT update the anchor lat/lng! 
-            // Only update the 'last seen' timestamp & battery so they remain 'Online'
-            await User.findByIdAndUpdate(userId, {
-                "lastLocation.timestamp": now,
-                batteryStatus: finalBattery,
-                isOnline: true
-            });
-        }
-
-        res.status(200).json({ success: true, message: shouldLog ? "Location logged" : "Location checked (idle)" });
+        res.status(200).json({ success: true, message: "Location logged" });
     } catch (error) {
         console.error("Location log error:", error);
         res.status(500).json({ success: false, message: error.message });
