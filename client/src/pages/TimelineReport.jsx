@@ -27,7 +27,7 @@ export default function TimelineReport() {
 
     const { isLoaded } = useJsApiLoader({
         id: 'google-map-script',
-        googleMapsApiKey: "AIzaSyBAbFbmXPOSgsBnhuYrCtSQ7yXK_0nB--Y"
+        googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
     });
 
     const token = JSON.parse(localStorage.getItem("auth")) || "";
