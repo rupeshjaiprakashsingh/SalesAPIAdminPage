@@ -111,7 +111,7 @@ const Dashboard = () => {
           <div className="sidebar-section-label">Main</div>
           {/* Navigation - icons only with tooltips */}
           <ul>
-            {NAV_ITEMS_COMMON.filter(item => !(role === "admin" && item.label === "Mark Attendance")).map((item) => (
+            {NAV_ITEMS_COMMON.filter(item => !(role === "admin" && (item.label === "Mark Attendance" || item.label === "My Profile"))).map((item) => (
               <li key={item.to}>
                 <Link
                   to={item.to}

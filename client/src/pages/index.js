@@ -12,3 +12,4 @@ export { default as MusterRoll } from "./MusterRoll";
 export { default as GeoDashboard } from "./GeoDashboard";
 export { default as CustomersDashboard } from "./CustomersDashboard";
 export { default as AddCustomer } from "./AddCustomer";
+export { default as StaffProfile } from "./StaffProfile";

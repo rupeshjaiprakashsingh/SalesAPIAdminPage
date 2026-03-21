@@ -347,129 +347,169 @@ const GeoDashboard = () => {
             (u.employeeId && u.employeeId.toLowerCase().includes(searchQuery.toLowerCase()))
         );
 
-        const summary = dashboardStats.summary || {};
-        const sumMotion = formatMinsToHrs(summary.totalMotionTime || 0);
-        const sumRest = formatMinsToHrs(summary.totalIdleTime || 0);
-        const sumTotal = formatMinsToHrs(summary.totalTime || 0);
+        // Sorting by distance to get "Top Performers"
+        const topPerformers = [...tableData].sort((a,b) => (b.totalDistance||0) - (a.totalDistance||0)).slice(0, 5);
+        const maxDist = topPerformers.length > 0 ? (topPerformers[0].totalDistance || 1) : 1;
+
+        const totalEmps = usersList.length;
+        const punchedIn = tableData.length;
+        const notMarked = Math.max(0, totalEmps - punchedIn);
+        const punchedOut = tableData.filter(u => u.idleTime > 60).length; // mock active inactive punch out
+        
+        // Mock Last 7 days chart array (Orders Received)
+        const last7Days = Array.from({length: 7}).map((_, i) => {
+             const d = new Date();
+             d.setDate(d.getDate() - (6 - i));
+             return { date: d.toLocaleDateString('en-GB', {day: 'numeric', month: 'short'}), value: Math.floor(Math.random() * 8) };
+        });
 
         return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {/* Header & Controls */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#111827' }}>Dashboard</h2>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
-                            <button onClick={() => changeDashboardDate(-1)} style={{ padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', borderRight: '1px solid #e5e7eb' }}>&lt;</button>
-                            <input 
-                                type="date" 
-                                value={dashboardDate}
-                                onChange={(e) => setDashboardDate(e.target.value)}
-                                style={{ padding: '8px 16px', border: 'none', outline: 'none', background: 'transparent', fontWeight: 'bold', fontSize: '0.85rem', fontFamily: 'inherit' }}
-                            />
-                            <button onClick={() => changeDashboardDate(1)} style={{ padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', borderLeft: '1px solid #e5e7eb' }}>&gt;</button>
-                        </div>
-                        <button style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>
-                            <i className="ri-refresh-line"></i> Refresh
-                        </button>
-                        <button style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>
-                            Download Report
-                        </button>
-                    </div>
-                </div>
+            <div className="geo-dashboard-layout">
+                 {/* Main Column */}
+                 <div className="geo-main-col">
+                      {/* Top Stat Cards */}
+                      <div className="geo-stats-row">
+                          <div className="geo-stat-card green">
+                              <span className="stat-card-title">Total Employees <i className="ri-group-line text-green" style={{fontSize: '14px'}}></i></span>
+                              <span className="stat-card-value">{totalEmps}</span>
+                          </div>
+                          <div className="geo-stat-card purple">
+                              <span className="stat-card-title">Not Marked <i className="ri-error-warning-line text-purple" style={{fontSize: '14px'}}></i></span>
+                              <span className="stat-card-value">{notMarked}</span>
+                          </div>
+                          <div className="geo-stat-card purple">
+                              <span className="stat-card-title">Punched In <i className="ri-login-circle-line text-purple" style={{fontSize: '14px'}}></i></span>
+                              <span className="stat-card-value">{punchedIn}</span>
+                          </div>
+                          <div className="geo-stat-card blue">
+                              <span className="stat-card-title">Punched Out <i className="ri-logout-circle-line text-blue" style={{fontSize: '14px'}}></i></span>
+                              <span className="stat-card-value">{punchedOut}</span>
+                          </div>
+                      </div>
+                      
+                      {/* Orders Overview Today */}
+                      <div className="geo-card-v2">
+                           <div className="geo-card-header-v2">Orders Overview Today</div>
+                           <div className="geo-empty-state-v2">
+                                <i className="ri-inbox-archive-line" style={{fontSize: '24px', color: '#10b981'}}></i>
+                                <span>No data to list</span>
+                           </div>
+                      </div>
+                      
+                      {/* Orders Received chart */}
+                      <div className="geo-card-v2">
+                           <div className="geo-card-header-v2">Orders Received</div>
+                           <div className="geo-card-subtitle-v2">Orders added by your staff or created by you will appear here</div>
+                           <div className="chart-bar-container">
+                               {last7Days.map((d, idx) => (
+                                    <div key={idx} className="chart-bar" style={{height: `${Math.max(5, (d.value / 8) * 100)}%`}}>
+                                        <div className="chart-bar-label">{d.date}</div>
+                                    </div>
+                               ))}
+                           </div>
+                      </div>
+                      
+                      {/* Tasks Overview */}
+                      <div className="geo-card-v2">
+                           <div className="geo-card-header-v2">Tasks Overview</div>
+                           <div className="geo-tasks-list" style={{width: '200px'}}>
+                               <div className="geo-task-item"><span className="geo-task-item-label"><div style={{width:'4px',height:'12px',background:'#9ca3af'}}></div> Total Tasks</span> <span className="geo-task-item-value">0</span></div>
+                               <div className="geo-task-item"><span className="geo-task-item-label"><div style={{width:'4px',height:'12px',background:'#fbbf24'}}></div> Not yet Started</span> <span className="geo-task-item-value">0</span></div>
+                               <div className="geo-task-item"><span className="geo-task-item-label"><div style={{width:'4px',height:'12px',background:'#ef4444'}}></div> Delayed Tasks</span> <span className="geo-task-item-value">0</span></div>
+                               <div className="geo-task-item"><span className="geo-task-item-label"><div style={{width:'4px',height:'12px',background:'#3b82f6'}}></div> In-progress</span> <span className="geo-task-item-value">0</span></div>
+                               <div className="geo-task-item"><span className="geo-task-item-label"><div style={{width:'4px',height:'12px',background:'#10b981'}}></div> Completed Tasks</span> <span className="geo-task-item-value">0</span></div>
+                           </div>
+                      </div>
+                      
+                      {/* Top Performers */}
+                      <div className="geo-card-v2">
+                           <div className="geo-card-header-v2">Top Performers</div>
+                           <div className="geo-card-subtitle-v2">Top Performers based on total distance logged</div>
+                           <div style={{display: 'flex', flexDirection: 'column'}}>
+                               {topPerformers.length === 0 ? (
+                                   <div className="geo-empty-state-v2" style={{height: '100px'}}>No Tracking Data Available to rank</div>
+                               ) : topPerformers.map(p => {
+                                   const perc = Math.min(100, (p.totalDistance / maxDist) * 100);
+                                   return (
+                                     <div key={p.name} className="performer-row">
+                                         <div className="performer-info"><span>{p.name}</span> <span style={{color: '#9ca3af'}}>{p.totalDistance} km</span></div>
+                                         <div className="performer-bar-bg">
+                                             <div className="performer-bar-fill" style={{width: `${perc}%`}}></div>
+                                         </div>
+                                     </div>
+                                   );
+                               })}
+                           </div>
+                      </div>
+                      
+                      {/* Business Overview Table */}
+                      <div className="geo-card-v2">
+                           <div className="geo-card-header-v2">Business Overview</div>
+                           <div className="geo-card-subtitle-v2">See staff punch in / punch out times, status of their tasks, and average task duration</div>
+                           
+                           <div className="geo-table-container">
+                               <table className="geo-table-v2">
+                                   <thead>
+                                       <tr>
+                                           <th>Name</th>
+                                           <th>Emp ID</th>
+                                           <th>Punched In</th>
+                                           <th>Punched Out</th>
+                                           <th>Total Tasks Completed</th>
+                                           <th>Total Orders Added</th>
+                                           <th>Average Task Duration</th>
+                                       </tr>
+                                   </thead>
+                                   <tbody>
+                                       {tableData.length === 0 ? (
+                                           <tr><td colSpan="7" style={{textAlign:'center', padding: '20px'}}>No records found</td></tr>
+                                       ) : tableData.map(u => (
+                                           <tr key={u._id}>
+                                               <td style={{fontWeight: 600, color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                                                   <div style={{width:'24px',height:'24px',background:'#f3f4f6',borderRadius:'50%',display:'flex',justifyContent:'center',alignItems:'center'}}><i className="ri-user-line" style={{fontSize:'12px'}}></i></div>
+                                                   {u.name.toUpperCase()}
+                                               </td>
+                                               <td style={{color: '#9ca3af'}}>{u.employeeId || "-"}</td>
+                                               <td style={{color: '#111827'}}>{u.inTime || "-"}</td>
+                                               <td style={{color: '#111827'}}>{u.outTime || "-"}</td>
+                                               <td>0</td>
+                                               <td>0</td>
+                                               <td>0 mins</td>
+                                           </tr>
+                                       ))}
+                                   </tbody>
+                               </table>
+                           </div>
+                      </div>
+                 </div>
 
-                {/* Top Summary Cards */}
-                {dashboardLoading ? (
-                    <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>Loading Dashboard Data...</div>
-                ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-                    <div style={{ background: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#166534', fontSize: '0.8rem', fontWeight: 600 }}>
-                            Total Distance <i className="ri-route-line" style={{ fontSize: '1.2rem', color: '#10b981' }}></i>
-                        </div>
-                        <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#111827' }}>{summary.totalDistance || "0.00"} <span style={{ fontSize: '1rem', fontWeight: 500 }}>kms</span></div>
-                    </div>
-                    <div style={{ background: '#faf5ff', border: '1px solid #f3e8ff', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6b21a8', fontSize: '0.8rem', fontWeight: 600 }}>
-                            Total Time <i className="ri-time-line" style={{ fontSize: '1.2rem', color: '#8b5cf6' }}></i>
-                        </div>
-                        <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#111827' }}>{sumTotal.h} <span style={{ fontSize: '1rem', fontWeight: 500 }}>hrs</span> {sumTotal.m} <span style={{ fontSize: '1rem', fontWeight: 500 }}>mins</span></div>
-                    </div>
-                    <div style={{ background: '#fdf2f8', border: '1px solid #fce7f3', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9d174d', fontSize: '0.8rem', fontWeight: 600 }}>
-                            Total Time Spent in Motion <i className="ri-run-line" style={{ fontSize: '1.2rem', color: '#ec4899' }}></i>
-                        </div>
-                        <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#111827' }}>{sumMotion.h} <span style={{ fontSize: '1rem', fontWeight: 500 }}>hrs</span> {sumMotion.m} <span style={{ fontSize: '1rem', fontWeight: 500 }}>mins</span></div>
-                    </div>
-                    <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#1e40af', fontSize: '0.8rem', fontWeight: 600 }}>
-                            Total Time Spent at Rest <i className="ri-hotel-bed-line" style={{ fontSize: '1.2rem', color: '#3b82f6' }}></i>
-                        </div>
-                        <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#111827' }}>{sumRest.h} <span style={{ fontSize: '1rem', fontWeight: 500 }}>hrs</span> {sumRest.m} <span style={{ fontSize: '1rem', fontWeight: 500 }}>mins</span></div>
-                    </div>
-                </div>
-                )}
-
-                {/* Table Section */}
-                <div style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', padding: '20px', minHeight: '400px' }}>
-                    
-                    {/* Filter and Search */}
-                    <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', width: '300px' }}>
-                            <i className="ri-search-line" style={{ color: '#9ca3af', marginRight: '8px' }}></i>
-                            <input 
-                                type="text" 
-                                placeholder="Search by name or staff ID" 
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                style={{ border: 'none', outline: 'none', width: '100%', fontSize: '0.85rem' }} 
-                            />
-                        </div>
-                        <button style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>
-                            <i className="ri-filter-3-line"></i> Filter
-                        </button>
-                    </div>
-
-                    {/* Data Table */}
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>
-                                    <th style={{ padding: '12px 16px', fontWeight: 500 }}>Name</th>
-                                    <th style={{ padding: '12px 16px', fontWeight: 500 }}>Status</th>
-                                    <th style={{ padding: '12px 16px', fontWeight: 500 }}>Total Distance</th>
-                                    <th style={{ padding: '12px 16px', fontWeight: 500 }}>Total Time</th>
-                                    <th style={{ padding: '12px 16px', fontWeight: 500 }}>Total time in motion</th>
-                                    <th style={{ padding: '12px 16px', fontWeight: 500 }}>Total time at rest</th>
-                                </tr>
-                            </thead>
-                            {!dashboardLoading && (
-                            <tbody>
-                                {filteredData.map((user) => {
-                                    const uMotion = formatMinsToHrs(user.motionTime || 0);
-                                    const uRest = formatMinsToHrs(user.idleTime || 0);
-                                    const uTotal = formatMinsToHrs(user.totalTime || 0);
-
-                                    return (
-                                        <tr key={user._id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                            <td style={{ padding: '16px', fontWeight: 700, color: '#2563eb', cursor: 'pointer' }}>{user.name.toUpperCase()}</td>
-                                            <td style={{ padding: '16px', color: '#6b7280' }}>-</td>
-                                            <td style={{ padding: '16px', fontWeight: 600, color: '#374151' }}>{user.totalDistance > 0 ? `${user.totalDistance} kms` : '-'}</td>
-                                            <td style={{ padding: '16px', color: '#374151' }}>{user.totalTime > 0 ? `${uTotal.h} hrs ${uTotal.m} mins` : '-'}</td>
-                                            <td style={{ padding: '16px', color: '#374151' }}>{user.motionTime > 0 ? `${uMotion.h} hrs ${uMotion.m} mins` : '-'}</td>
-                                            <td style={{ padding: '16px', color: '#374151' }}>{user.idleTime > 0 ? `${uRest.h} hrs ${uRest.m} mins` : '-'}</td>
-                                        </tr>
-                                    );
-                                })}
-                                {filteredData.length === 0 && (
-                                    <tr>
-                                        <td colSpan="6" style={{ padding: '30px', textAlign: 'center', color: '#6b7280' }}>No tracking data found for the selected date or query.</td>
-                                    </tr>
-                                )}
-                            </tbody>
-                            )}
-                        </table>
-                    </div>
-                </div>
+                 {/* Side Column */}
+                 <div className="geo-side-col">
+                      <div className="geo-card-v2">
+                          <div className="geo-card-header-v2">Customers Overview</div>
+                          <div style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+                              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                                   <div style={{display:'flex', flexDirection:'column', gap:'4px'}}>
+                                        <span style={{fontSize:'11px', color:'#6b7280', fontWeight: 500}}>Customers Added Today <i className="ri-information-line"></i></span>
+                                        <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                                             <span style={{color:'#10b981', background:'#ecfdf5', padding:'2px 8px', borderRadius:'12px', fontSize:'9px', fontWeight: 600}}>↗ 0 New Than Yesterday</span>
+                                        </div>
+                                   </div>
+                                   <span style={{fontSize:'20px', fontWeight: 700, color:'#111827'}}>0</span>
+                              </div>
+                              <hr style={{border: 'none', borderTop: '1px dashed #e5e7eb', margin: '8px 0'}} />
+                              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                                   <div style={{display:'flex', flexDirection:'column', gap:'4px'}}>
+                                        <span style={{fontSize:'11px', color:'#6b7280', fontWeight: 500}}>Customers Served Today <i className="ri-information-line"></i></span>
+                                        <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                                             <span style={{color:'#ef4444', background:'#fef2f2', padding:'2px 8px', borderRadius:'12px', fontSize:'9px', fontWeight: 600}}>↘ 0 Less Than Yesterday</span>
+                                        </div>
+                                   </div>
+                                   <span style={{fontSize:'20px', fontWeight: 700, color:'#111827'}}>0</span>
+                              </div>
+                          </div>
+                      </div>
+                 </div>
             </div>
         );
     };

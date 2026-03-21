@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
 import "../styles/Dashboard.css";
@@ -205,12 +206,14 @@ const UserManagement = () => {
                             {users.map((user) => (
                                 <tr key={user._id}>
                                     <td>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#e0e7ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}>
-                                                {user.name.charAt(0).toUpperCase()}
+                                        <Link to={`/dashboard/users/${user._id}/profile`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                                <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#e0e7ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}>
+                                                    {user.name.charAt(0).toUpperCase()}
+                                                </div>
+                                                <span style={{ fontWeight: 600, color: '#2563eb' }}>{user.name}</span>
                                             </div>
-                                            {user.name}
-                                        </div>
+                                        </Link>
                                     </td>
                                     <td style={{ color: '#6b7280', fontWeight: 500 }}>{user.employeeId || "-"}</td>
                                     <td>{user.username}</td>

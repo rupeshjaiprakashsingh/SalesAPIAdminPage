@@ -720,3 +720,81 @@ exports.getLiveLocations = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+exports.getMonthlyAttendanceUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { month } = req.query; // e.g., "YYYY-MM"
+
+    if (!month) {
+      return res.status(400).json({ message: "month query param is required (YYYY-MM)" });
+    }
+
+    const startOfMonth = new Date(`${month}-01T00:00:00.000Z`);
+    
+    // next month start
+    const [y_str, m_str] = month.split("-");
+    let y = parseInt(y_str);
+    let m = parseInt(m_str);
+    if (m === 12) {
+      m = 1;
+      y += 1;
+    } else {
+      m += 1;
+    }
+    const nextMonth = `${y}-${String(m).padStart(2, "0")}`;
+    const endOfMonth = new Date(`${nextMonth}-01T00:00:00.000Z`);
+    
+    // fetch user details
+    const user = await User.findById(userId).select("name email employee_id");
+
+    const pipeline = [
+      {
+        $match: {
+          $expr: { $eq: ["$userId", { $toObjectId: userId }] },
+          createdAt: { $gte: startOfMonth, $lt: endOfMonth }
+        }
+      },
+      {
+        $addFields: {
+          dateStr: {
+            $dateToString: { format: "%Y-%m-%d", date: "$deviceTime" }
+          }
+        }
+      },
+      { $sort: { deviceTime: 1 } },
+      {
+        $group: {
+          _id: "$dateStr",
+          inRecord: {
+            $first: { $cond: [{ $eq: ["$attendanceType", "IN"] }, "$$ROOT", null] }
+          },
+          outRecord: {
+            $first: { $cond: [{ $eq: ["$attendanceType", "OUT"] }, "$$ROOT", null] }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          date: "$_id",
+          in: "$inRecord",
+          out: "$outRecord"
+        }
+      },
+      { $sort: { date: 1 } }
+    ];
+
+    const records = await Attendance.aggregate(pipeline);
+
+    res.status(200).json({
+      success: true,
+      user,
+      month,
+      records
+    });
+  } catch (err) {
+    console.error("Monthly attendance error", err);
+    res.status(500).json({ message: err.message });
+  }
+};
