@@ -156,8 +156,7 @@ exports.markAttendance = async (req, res) => {
     console.log(`[Attendance] Request: ${attendanceType}, User: ${userId}, Server Time: ${serverTime.toISOString()}`);
 
     // -------- Mandatory Validation ----------
-    // Removed deviceTime from mandatory check as we override it
-    if (!attendanceType || !latitude || !longitude || !deviceId) {
+    if (!attendanceType || !latitude || !longitude) {
       return res.status(400).json({ message: "Mandatory fields missing" });
     }
 
@@ -212,40 +211,9 @@ exports.markAttendance = async (req, res) => {
     }
 
     // ---------------------------------------------------------
-    // PERMANENT DEVICE LOCK (One User = One Device Forever)
+    // PERMANENT DEVICE LOCK & PROXY CHECK REMOVED
+    // User requested to remove all device mismatch checking logic.
     // ---------------------------------------------------------
-    const currentUser = await User.findById(userId);
-
-    if (!currentUser.deviceId) {
-      // First time marking attendance? Bind this device to user.
-      currentUser.deviceId = deviceId;
-      await currentUser.save();
-    } else if (currentUser.deviceId !== deviceId) {
-      // Device mismatch! Block access.
-      console.log(`[Attendance] Device Mismatch! User ${userId} tried device ${deviceId} but is locked to ${currentUser.deviceId}`);
-      return res.status(403).json({
-        message: "Device mismatch. You are locked to another device. Contact Admin to reset."
-      });
-    }
-
-    // ---------------------------------------------------------
-    // PREVENT PROXY ATTENDANCE (One Device = One User Per Day)
-    // ---------------------------------------------------------
-    const deviceUsedByOther = await Attendance.findOne({
-      deviceId,
-      userId: { $ne: userId }, // Not the current user
-      createdAt: {
-        $gte: startOfDay,
-        $lte: endOfDay,
-      },
-    });
-
-    if (deviceUsedByOther) {
-      console.log(`[Attendance] Proxy Attempt Blocked! Device ${deviceId} used by another user today.`);
-      return res.status(403).json({
-        message: "This device has already been used by another user today. Proxy attendance is not allowed."
-      });
-    }
 
     // Geofence Validation
     const insideFence = isInsideGeofence(latitude, longitude);

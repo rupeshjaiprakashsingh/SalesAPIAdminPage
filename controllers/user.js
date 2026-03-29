@@ -26,10 +26,10 @@ const login = async (req, res) => {
 
       return res.status(200).json({ msg: "user logged in", token, role: foundUser.role, name: foundUser.name });
     } else {
-      return res.status(400).json({ msg: "Bad password" });
+      return res.status(400).json({ msg: "Incorrect password. Please verify your credentials." });
     }
   } else {
-    return res.status(400).json({ msg: "Bad credentials" });
+    return res.status(400).json({ msg: "User not found. Please verify your credentials and ensure you have selected the correct Organization." });
   }
 };
 
