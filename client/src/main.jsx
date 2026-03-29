@@ -17,6 +17,17 @@ const cloudDefault = import.meta.env.VITE_API_BASE || 'https://mern-login-and-re
 const apiBase = (!isLocalhost || forceApi) ? cloudDefault : 'http://localhost:3000';
 axios.defaults.baseURL = apiBase;
 
+// Add a request interceptor to include the X-Tenant-ID header
+axios.interceptors.request.use((config) => {
+  const tenantId = localStorage.getItem('tenant_id');
+  if (tenantId) {
+    config.headers['X-Tenant-ID'] = tenantId;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />

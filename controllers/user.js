@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+// User model now comes from req.models (tenant-specific)
 
 const login = async (req, res) => {
   const { username, password } = req.body;
@@ -10,6 +10,7 @@ const login = async (req, res) => {
     });
   }
 
+  const User = req.models.User;
   let foundUser = await User.findOne({ username: new RegExp('^' + req.body.username + '$', 'i') });
   if (foundUser) {
     const isMatch = await foundUser.comparePassword(password);
@@ -19,7 +20,7 @@ const login = async (req, res) => {
         { id: foundUser._id, name: foundUser.name, role: foundUser.role },
         process.env.JWT_SECRET,
         {
-          expiresIn: "30d",
+          expiresIn: "365d",
         }
       );
 
@@ -43,6 +44,7 @@ const dashboard = async (req, res) => {
 
 const getAllUsers = async (req, res) => {
   try {
+    const User = req.models.User;
     const { search, page = 1, limit = 10, status } = req.query;
     const query = {};
 
@@ -83,6 +85,7 @@ const getAllUsers = async (req, res) => {
 
 const getUserById = async (req, res) => {
   try {
+    const User = req.models.User;
     const user = await User.findById(req.params.id).select("-password");
     if (!user) {
       return res.status(404).json({ msg: "User not found" });
@@ -95,6 +98,7 @@ const getUserById = async (req, res) => {
 
 const createUser = async (req, res) => {
   try {
+    const User = req.models.User;
     const { name, username, email, password, role, mobileNumber, dateOfBirth, employeeId, isActive } = req.body;
     if (!name || !username || !email || !password || !mobileNumber || !dateOfBirth) {
       return res.status(400).json({ msg: "Please provide all fields including username, mobile, and DOB" });
@@ -124,6 +128,7 @@ const createUser = async (req, res) => {
 
 const updateUser = async (req, res) => {
   try {
+    const User = req.models.User;
     const { name, username, email, password, role, mobileNumber, dateOfBirth, employeeId, isActive } = req.body;
     const user = await User.findById(req.params.id);
 
@@ -157,6 +162,7 @@ const updateUser = async (req, res) => {
 
 const deleteUser = async (req, res) => {
   try {
+    const User = req.models.User;
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) {
       return res.status(404).json({ msg: "User not found" });
@@ -170,6 +176,7 @@ const deleteUser = async (req, res) => {
 const { sendEmail } = require("../utils/emailService");
 
 const register = async (req, res) => {
+  const User = req.models.User;
   let { name, username, email, password, role, mobileNumber, dateOfBirth } = req.body;
 
   if (!name || !username || !email || !password || !mobileNumber || !dateOfBirth) {
@@ -247,6 +254,7 @@ module.exports = {
         console.error("User ID missing in request");
         return res.status(400).json({ msg: "User ID missing" });
       }
+      const User = req.models.User;
       const user = await User.findById(req.user.id).select("-password");
       if (!user) {
         console.error("User not found in DB for ID:", req.user.id);
@@ -260,6 +268,7 @@ module.exports = {
   },
   updateProfile: async (req, res) => {
     try {
+      const User = req.models.User;
       const { name, password } = req.body;
       const user = await User.findById(req.user.id);
 
@@ -285,6 +294,7 @@ module.exports = {
   },
   resetDevice: async (req, res) => {
     try {
+      const User = req.models.User;
       const user = await User.findById(req.params.id);
       if (!user) {
         return res.status(404).json({ msg: "User not found" });

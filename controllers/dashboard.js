@@ -1,5 +1,4 @@
-const User = require("../models/User");
-const Attendance = require("../models/Attendance");
+// Models now come from req.models (tenant-specific)
 const mongoose = require("mongoose");
 
 // GET ADMIN DASHBOARD STATS
@@ -11,6 +10,7 @@ exports.getAdminStats = async (req, res) => {
         const nextDay = new Date(targetDate);
         nextDay.setDate(nextDay.getDate() + 1);
 
+        const { User, Attendance } = req.models;
         // Total active users count
         const totalUsers = await User.countDocuments({ role: { $ne: "admin" }, isActive: { $ne: false } }); // Count only active staff
 
@@ -79,6 +79,7 @@ exports.getAdminStats = async (req, res) => {
 // GET USER DASHBOARD STATS
 exports.getUserStats = async (req, res) => {
     try {
+        const { Attendance } = req.models;
         const userId = req.params.userId || req.user.id;
 
         // Today's status
@@ -173,6 +174,7 @@ exports.getAttendanceTrend = async (req, res) => {
         startDate.setDate(startDate.getDate() - days);
         startDate.setHours(0, 0, 0, 0);
 
+        const { Attendance } = req.models;
         const trend = await Attendance.aggregate([
             {
                 $match: {
@@ -215,6 +217,7 @@ exports.getRecentActivity = async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 10;
 
+        const { Attendance } = req.models;
         const recentActivity = await Attendance.find()
             .populate("userId", "name email")
             .sort({ createdAt: -1 })

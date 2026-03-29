@@ -1,10 +1,11 @@
-const GeoFence = require("../models/GeoFence");
-const GeoFenceLog = require("../models/GeoFenceLog");
+// GeoFence and GeoFenceLog models now come from req.models (tenant-specific)
+// const GeoFenceLog removed — use req.models.GeoFenceLog
 const { calculateDistance } = require("../utils/geoFence");
 
 // Create a new GeoFence
 exports.createGeoFence = async (req, res) => {
     try {
+        const GeoFence = req.models.GeoFence;
         const { title, lat, lng, radius } = req.body;
 
         const newFence = new GeoFence({
@@ -23,6 +24,7 @@ exports.createGeoFence = async (req, res) => {
 // Get All GeoFences
 exports.getAllGeoFences = async (req, res) => {
     try {
+        const GeoFence = req.models.GeoFence;
         const fences = await GeoFence.find({ isActive: true });
         res.status(200).json({ success: true, data: fences });
     } catch (error) {
@@ -34,6 +36,8 @@ exports.getAllGeoFences = async (req, res) => {
 // Checks user location against all fences and updates logs
 exports.checkGeofenceStatus = async (req, res) => {
     try {
+        const GeoFence = req.models.GeoFence;
+        const GeoFenceLog = req.models.GeoFenceLog;
         const { userId, latitude, longitude } = req.body;
 
         if (!userId || !latitude || !longitude) {
@@ -104,6 +108,7 @@ exports.checkGeofenceStatus = async (req, res) => {
 // Get Logs for a User
 exports.getGeofenceLogs = async (req, res) => {
     try {
+        const GeoFenceLog = req.models.GeoFenceLog;
         const { userId } = req.params;
         const logs = await GeoFenceLog.find({ userId })
             .populate("fenceId", "title center")

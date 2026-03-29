@@ -13,6 +13,9 @@ const attendanceRoutes = require("./routes/attendance");
 const dashboardRoutes = require("./routes/dashboard");
 const reportRoutes = require("./routes/reports");
 
+// Tenant Middleware (Multi-tenant DB switching)
+const tenantMiddleware = require("./middleware/tenant");
+
 // Cron Jobs
 const { scheduleDailyReport, scheduleKeepAlive } = require("./utils/cronJobs");
 
@@ -27,6 +30,9 @@ app.get("/api/v1/health", (req, res) => {
 app.get("/ping", (req, res) => {
   res.status(200).send("ok");
 });
+
+// Apply tenant middleware to ALL /api/v1 routes
+app.use("/api/v1", tenantMiddleware);
 
 // Versioned APIs
 // Mount user routes at /api/v1 so endpoints become /api/v1/login, /api/v1/register

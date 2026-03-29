@@ -1,5 +1,4 @@
-const User = require("../models/User");
-const Attendance = require("../models/Attendance");
+// Models now come from req.models (tenant-specific)
 const { sendEmail, createDailyReportHTML } = require("../utils/emailService");
 const ExcelJS = require("exceljs");
 
@@ -115,6 +114,7 @@ exports.getMonthlyReport = async (req, res) => {
         const startDate = new Date(year, month - 1, 1);
         const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
+        const { User, Attendance } = req.models;
         // Get all users
         const allUsers = await User.find().select("name email");
 
@@ -204,6 +204,7 @@ exports.exportMonthlyExcel = async (req, res) => {
         // Get report data (reuse the logic)
         const startDate = new Date(year, month - 1, 1);
         const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+        const { User, Attendance } = req.models;
         const allUsers = await User.find().select("name email");
         const monthAttendance = await Attendance.find({
             deviceTime: { $gte: startDate, $lte: endDate }
@@ -325,6 +326,7 @@ exports.getDateRangeReport = async (req, res) => {
             userQuery._id = userId;
         }
 
+        const { User, Attendance } = req.models;
         // Get users
         const allUsers = await User.find(userQuery).select("name email");
 
@@ -434,6 +436,7 @@ exports.exportDateRangeExcel = async (req, res) => {
             userQuery._id = userId;
         }
 
+        const { User, Attendance } = req.models;
         const allUsers = await User.find(userQuery).select("name email");
 
         // Attendance Filter
@@ -596,7 +599,7 @@ exports.getTimelineReport = async (req, res) => {
         endOfDay.setHours(23, 59, 59, 999);
 
         // Fetch logs (using EmployeeLocationLog for precise map routing)
-        const EmployeeLocationLog = require("../models/EmployeeLocationLog");
+        const EmployeeLocationLog = req.models.EmployeeLocationLog;
         const logs = await EmployeeLocationLog.find({
             employeeId: userId,
             timestamp: { $gte: startOfDay, $lte: endOfDay }
@@ -787,6 +790,7 @@ exports.getCalendarReport = async (req, res) => {
         }
 
         // Users Fetching
+        const { User, Attendance } = req.models;
         const userQuery = {};
         if (userId && userId !== "all") {
             userQuery._id = userId;
@@ -898,7 +902,8 @@ exports.getDashboardStats = async (req, res) => {
         const endOfDay = new Date(date);
         endOfDay.setHours(23, 59, 59, 999);
 
-        const EmployeeLocationLog = require("../models/EmployeeLocationLog");
+        const EmployeeLocationLog = req.models.EmployeeLocationLog;
+        const { User } = req.models;
         const { calculateDistance } = require("../utils/geoFence");
 
         // Fetch all active tracking users

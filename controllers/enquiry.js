@@ -1,4 +1,4 @@
-const Enquiry = require("../models/Enquiry");
+// Enquiry model now comes from req.models (tenant-specific)
 const { sendEmail } = require("../utils/emailService");
 
 const createEnquiry = async (req, res) => {
@@ -9,6 +9,7 @@ const createEnquiry = async (req, res) => {
     }
 
     try {
+        const Enquiry = req.models.Enquiry;
         // Save to database
         const enquiry = await Enquiry.create({
             fullName,
@@ -54,6 +55,7 @@ const createEnquiry = async (req, res) => {
 
 const getAllEnquiries = async (req, res) => {
     try {
+        const Enquiry = req.models.Enquiry;
         const enquiries = await Enquiry.find().sort({ createdAt: -1 });
         res.status(200).json({ success: true, count: enquiries.length, data: enquiries });
     } catch (error) {

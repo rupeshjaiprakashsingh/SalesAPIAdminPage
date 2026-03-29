@@ -25,6 +25,9 @@ const Login = () => {
   // Yup Validation Schema
   // -------------------------
   const validationSchema = Yup.object({
+    tenantId: Yup.string()
+      .required("Organization is required"),
+
     username: Yup.string()
       .trim()
       .required("Username is required"),
@@ -39,6 +42,7 @@ const Login = () => {
   // -------------------------
   const formik = useFormik({
     initialValues: {
+      tenantId: localStorage.getItem("tenant_id") || "scan_services",
       username: "",
       password: "",
     },
@@ -47,7 +51,13 @@ const Login = () => {
     validateOnChange: true,
     onSubmit: async (values) => {
       try {
-        const response = await axios.post("/api/v1/login", values);
+        // Save tenant to local storage before API call so the axios interceptor picks it up
+        localStorage.setItem("tenant_id", values.tenantId);
+        
+        const response = await axios.post("/api/v1/login", {
+            username: values.username,
+            password: values.password
+        });
         localStorage.setItem("auth", JSON.stringify(response.data.token));
 
         toast.success(`Welcome back, ${response.data.name}!`);
@@ -93,9 +103,26 @@ const Login = () => {
 
           <div className="login-center">
             <h2>Welcome back!</h2>
-            <p>Please enter your details</p>
+            <p>Please select organisation & enter details</p>
 
             <form onSubmit={formik.handleSubmit}>
+
+              {/* TENANT SELECTION */}
+              <select
+                name="tenantId"
+                value={formik.values.tenantId}
+                onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                className={
+                  formik.touched.tenantId && formik.errors.tenantId ? "input-error" : ""
+                }
+              >
+                <option value="scan_services">Scan Services</option>
+                <option value="ezzy_products">Ezzy Products</option>
+              </select>
+              {formik.touched.tenantId && formik.errors.tenantId && (
+                <p className="error-text">{formik.errors.tenantId}</p>
+              )}
 
               {/* USERNAME */}
               <input

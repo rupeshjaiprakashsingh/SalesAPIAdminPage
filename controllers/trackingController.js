@@ -1,12 +1,12 @@
-const LocationPing = require("../models/LocationPing");
-const User = require("../models/User");
-const Attendance = require("../models/Attendance");
+// Models now come from req.models (tenant-specific)
+// const LocationPing, User, Attendance removed
 
 // @desc    Update user location
 // @route   POST /api/v1/tracking/update
 // @access  Private (User)
 exports.updateLocation = async (req, res) => {
     try {
+        const { LocationPing, User } = req.models;
         const { latitude, longitude, accuracy, speed, heading, batteryPercentage, deviceId, timestamp } = req.body;
         const userId = req.user.id; // From auth middleware
 
@@ -63,6 +63,7 @@ exports.getLiveLocations = async (req, res) => {
             return res.status(403).json({ success: false, message: "Not authorized to view live locations" });
         }
 
+        const { User, Attendance } = req.models;
         const users = await User.find({ role: 'user' }).select('name lastLocation batteryStatus isOnline');
 
         // 3. Get latest attendance status for each user for TODAY
@@ -128,6 +129,7 @@ exports.getUserHistory = async (req, res) => {
         const endOfDay = new Date(queryDate.setHours(23, 59, 59, 999));
 
         // 2. Fetch Location Pings
+        const LocationPing = req.models.LocationPing;
         const pings = await LocationPing.find({
             userId: userId,
             timestamp: { $gte: startOfDay, $lte: endOfDay }

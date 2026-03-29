@@ -1,7 +1,8 @@
-const Customer = require("../models/Customer");
+// Customer model now comes from req.models (tenant-specific)
 
 exports.addCustomer = async (req, res) => {
     try {
+        const Customer = req.models.Customer;
         const customerData = {
             ...req.body,
             createdBy: req.user.id
@@ -16,6 +17,7 @@ exports.addCustomer = async (req, res) => {
 
 exports.getCustomers = async (req, res) => {
     try {
+        const Customer = req.models.Customer;
         const customers = await Customer.find().populate("createdBy", "name").sort({ createdAt: -1 });
         res.status(200).json({ success: true, data: customers });
     } catch (error) {
@@ -26,6 +28,7 @@ exports.getCustomers = async (req, res) => {
 
 exports.getCustomerById = async (req, res) => {
     try {
+        const Customer = req.models.Customer;
         const customer = await Customer.findById(req.params.id);
         if (!customer) {
             return res.status(404).json({ success: false, message: "Customer not found" });
@@ -39,6 +42,7 @@ exports.getCustomerById = async (req, res) => {
 
 exports.updateCustomer = async (req, res) => {
     try {
+        const Customer = req.models.Customer;
         const customer = await Customer.findByIdAndUpdate(req.params.id, req.body, {
             new: true,
             runValidators: true
@@ -55,6 +59,7 @@ exports.updateCustomer = async (req, res) => {
 
 exports.deleteCustomer = async (req, res) => {
     try {
+        const Customer = req.models.Customer;
         const customer = await Customer.findByIdAndDelete(req.params.id);
         if (!customer) {
             return res.status(404).json({ success: false, message: "Customer not found" });
@@ -65,3 +70,4 @@ exports.deleteCustomer = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+

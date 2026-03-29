@@ -1,5 +1,5 @@
-const Attendance = require("../models/Attendance");
-const User = require("../models/User");
+// Models now come from req.models (tenant-specific)
+// const Attendance and User removed
 const { isInsideGeofence } = require("../utils/geoFence");
 
 // =========================================================
@@ -13,6 +13,7 @@ exports.adminAddAttendance = async (req, res) => {
       return res.status(403).json({ message: "Access denied. Admins only." });
     }
 
+    const { User, Attendance } = req.models;
     const { userId, status, date, remarks } = req.body;
 
     if (!userId) {
@@ -118,6 +119,7 @@ exports.adminAddAttendance = async (req, res) => {
 // Mark Attendance (IN/OUT)
 exports.markAttendance = async (req, res) => {
   try {
+    const { Attendance, User } = req.models;
     const userId = req.user.id; // Get from JWT
     const ipAddress = req.ip;
 
@@ -333,6 +335,7 @@ exports.markAttendance = async (req, res) => {
 // GET ALL ATTENDANCE (Admin or Global View) - Merged by Day
 exports.getAllAttendance = async (req, res) => {
   try {
+    const { Attendance } = req.models;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
@@ -470,6 +473,7 @@ exports.getAllAttendance = async (req, res) => {
 
 exports.getDailyAttendance = async (req, res) => {
   try {
+    const { Attendance, User } = req.models;
     const { userId } = req.params;
     const { date } = req.query;
 
@@ -533,6 +537,7 @@ exports.getDailyAttendance = async (req, res) => {
 // DELETE Single Attendance
 exports.deleteAttendance = async (req, res) => {
   try {
+    const { Attendance } = req.models;
     const { id } = req.params;
     await Attendance.findByIdAndDelete(id);
     res.status(200).json({ message: "Record deleted successfully" });
@@ -544,6 +549,7 @@ exports.deleteAttendance = async (req, res) => {
 // DELETE Multiple Attendance
 exports.deleteMultipleAttendance = async (req, res) => {
   try {
+    const { Attendance } = req.models;
     const { ids } = req.body; // Expect array of IDs
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ message: "No IDs provided" });
@@ -559,6 +565,7 @@ exports.deleteMultipleAttendance = async (req, res) => {
 // UPDATE Attendance
 exports.updateAttendance = async (req, res) => {
   try {
+    const { Attendance } = req.models;
     const { id } = req.params;
     const updates = req.body;
 
@@ -578,7 +585,7 @@ exports.updateAttendance = async (req, res) => {
 // Priority: User.lastLocation (most recent GPS ping) → check-in location (fallback)
 exports.getLiveLocations = async (req, res) => {
   try {
-    const mongoose = require("mongoose");
+    const { Attendance } = req.models;
 
     // Build IST-aware "today" window
     const IST_OFFSET = 5.5 * 60 * 60 * 1000;
@@ -723,6 +730,7 @@ exports.getLiveLocations = async (req, res) => {
 
 exports.getMonthlyAttendanceUser = async (req, res) => {
   try {
+    const { Attendance, User } = req.models;
     const { userId } = req.params;
     const { month } = req.query; // e.g., "YYYY-MM"
 

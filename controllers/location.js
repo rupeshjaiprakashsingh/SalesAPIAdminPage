@@ -1,5 +1,4 @@
-const EmployeeLocationLog = require("../models/EmployeeLocationLog");
-const User = require("../models/User");
+// Models now come from req.models (tenant-specific)
 
 // Helper to calculate distance in meters between two lat/lng coordinates
 function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
@@ -17,6 +16,7 @@ function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
 // Legacy Log single location (High frequency)
 exports.logLocation = async (req, res) => {
     try {
+        const { EmployeeLocationLog, User } = req.models;
         const userId = req.user.id;
         const { latitude, longitude, accuracy, battery, batteryPercentage } = req.body;
         const finalBattery = battery !== undefined ? battery : batteryPercentage;
@@ -52,6 +52,7 @@ exports.logLocation = async (req, res) => {
 // Applies server-side deduplication to prevent spider-web GPS jitter from being stored.
 exports.logLocationBatch = async (req, res) => {
     try {
+        const { EmployeeLocationLog, User } = req.models;
         const userId = req.user.id;
         // Support both { points: [...] } OR the raw array [...]
         let points = req.body.points || req.body;
@@ -146,6 +147,7 @@ exports.logLocationBatch = async (req, res) => {
 // Get Live User Locations (Latest ping per user)
 exports.getLiveLocations = async (req, res) => {
     try {
+        const EmployeeLocationLog = req.models.EmployeeLocationLog;
         const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
         const pipeline = [
             { $sort: { timestamp: -1 } },
@@ -179,6 +181,7 @@ exports.getLiveLocations = async (req, res) => {
 // Get Location History for a Specific User and Date
 exports.getUserHistory = async (req, res) => {
     try {
+        const { EmployeeLocationLog, User } = req.models;
         const { userId, date } = req.query; // date: 'YYYY-MM-DD'
         if (!userId || !date) return res.status(400).json({ success: false, message: "Please provide userId and date" });
 
