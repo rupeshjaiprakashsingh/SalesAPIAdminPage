@@ -17,8 +17,12 @@ export default function AttendanceList() {
   // filters
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const getTodayStr = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  };
+  const [startDate, setStartDate] = useState(getTodayStr());
+  const [endDate, setEndDate] = useState(getTodayStr());
 
   // Add Attendance Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -60,7 +64,7 @@ export default function AttendanceList() {
     setLoading(true);
     try {
       const res = await axios.get(
-        `/api/v1/attendance/list?page=${p}&limit=${l}`,
+        `/api/v1/attendance/list?page=${p}&limit=${l}&startDate=${startDate}&endDate=${endDate}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -97,12 +101,14 @@ export default function AttendanceList() {
     }
   };
 
-  // Initial load
+  // Load and reload on date change
   useEffect(() => {
-    // Optionally default to today's date if empty initially, but let's just fetch
     fetchRecords(1, limit);
-    fetchUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate]);
+
+  useEffect(() => {
+     fetchUsers();
   }, []);
 
   // Helper: Arrow Pagination for Date
@@ -116,6 +122,10 @@ export default function AttendanceList() {
 
   const getFormattedDate = () => {
     if (!startDate && !endDate) return "All Time";
+    const getTodayStr2 = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0]; };
+    if (startDate === endDate && startDate === getTodayStr2()) {
+        return "Today, " + new Date(startDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    }
     if (startDate === endDate || (startDate && !endDate)) {
       return new Date(startDate).toLocaleDateString("en-IN", {
         day: "2-digit",
@@ -143,26 +153,39 @@ export default function AttendanceList() {
     fetchRecords(1, newLimit);
   };
 
-  // Apply search + filters on UI (not API)
-  const filtered = records.filter((r) => {
-    const matchesName =
-      r.userDetails?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      r.userDetails?.email?.toLowerCase().includes(search.toLowerCase());
+  // Apply map & merge logic if single date is selected
+  const isSingleDate = startDate && endDate && startDate === endDate;
+  let baseArray = records;
 
-    // For type filter with merged records
+  if (isSingleDate && users.length > 0) {
+    baseArray = users.map(user => {
+      const existing = records.find(r => r.userId === user._id || r.userId === user.id);
+      if (existing) return existing;
+
+      return {
+        userId: user._id || user.id,
+        dateStr: startDate,
+        userDetails: user,
+        inRecord: null,
+        outRecord: null,
+        dummy: true
+      };
+    });
+  }
+
+  const filtered = baseArray.filter((r) => {
+    const nameStr = r.userDetails?.name || "";
+    const emailStr = r.userDetails?.email || "";
+    const matchesName = nameStr.toLowerCase().includes(search.toLowerCase()) || emailStr.toLowerCase().includes(search.toLowerCase());
+
     let matchesType = true;
-    if (typeFilter === "IN") {
-      matchesType = r.inRecord != null;
-    } else if (typeFilter === "OUT") {
-      matchesType = r.outRecord != null;
-    }
+    if (typeFilter === "IN") matchesType = r.inRecord != null;
+    else if (typeFilter === "OUT") matchesType = r.outRecord != null;
 
-    // Date range filter
     let matchesDate = true;
-    if (startDate || endDate) {
-      const recordDate = r.dateStr;
-      if (startDate && recordDate < startDate) matchesDate = false;
-      if (endDate && recordDate > endDate) matchesDate = false;
+    if (!isSingleDate && (startDate || endDate)) {
+      if (startDate && r.dateStr < startDate) matchesDate = false;
+      if (endDate && r.dateStr > endDate) matchesDate = false;
     }
 
     return matchesName && matchesType && matchesDate;
@@ -275,6 +298,25 @@ export default function AttendanceList() {
         date: newAttendance.date || undefined,   // blank → backend uses today
         remarks: newAttendance.remarks || undefined
       };
+  const handleQuickMark = async (userId, status, date) => {
+    if (userRole !== 'admin') return;
+    try {
+      const payload = {
+        userId,
+        status,
+        date,
+        remarks: "Quick Marked from Dashboard"
+      };
+      await axios.post(`/api/v1/attendance/admin-add`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success(`Marked as ${status}`);
+      fetchRecords(page, limit);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Error marking attendance");
+    }
+  };
+
       await axios.post(
         `/api/v1/attendance/admin-add`,
         payload,
@@ -289,244 +331,244 @@ export default function AttendanceList() {
     }
   };
 
-  return (
-    <div className="attendance-list-page">
-      {/* COMPACT HEADER — single row */}
-      <div style={{ background: 'white', padding: '6px 12px', borderRadius: '10px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-          
-          {/* Left: title + search + filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#f3e8ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9333ea', flexShrink: 0 }}>
-                <i className="ri-user-3-fill" style={{ fontSize: '13px' }}></i>
-              </div>
-              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>Daily Attendance View</h3>
-            </div>
-            <div style={{ position: 'relative' }}>
-              <i className="ri-search-line" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', fontSize: '13px' }}></i>
-              <input
-                type="text"
-                placeholder="Search by Name"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{ width: '200px', padding: '6px 10px 6px 30px', border: '1px solid #e5e7eb', borderRadius: '6px', outline: 'none', color: '#374151', fontSize: '0.8rem' }}
-              />
-            </div>
-            <button style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>
-              <i className="ri-filter-3-fill"></i> Filter
-            </button>
-            {/* Hidden date input for override */}
-            <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setEndDate(e.target.value); }} style={{ opacity: 0, position: 'absolute', pointerEvents: 'none', width: '1px', height: '1px' }} />
-          </div>
 
-          {/* Right: date nav + actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: '#4b5563', fontSize: '0.8rem' }}>
-               <i className="ri-arrow-left-s-line" style={{ cursor: 'pointer', fontSize: '1rem' }} onClick={() => handleDateChange(-1)}></i>
-               <span style={{ minWidth: '80px', textAlign: 'center' }}>{getFormattedDate()}</span>
-               <i className="ri-arrow-right-s-line" style={{ cursor: 'pointer', fontSize: '1rem' }} onClick={() => handleDateChange(1)}></i>
-               <i className="ri-calendar-line" style={{ color: '#9ca3af', fontSize: '1rem', cursor: 'pointer' }}></i>
+  const statTotalStaff = users.length;
+  const statPresentCount = filtered.filter(f => { const s = f.outRecord?.status || f.inRecord?.status; return s === "Present" || s === "Full Day"; }).length;
+  const statAbsentCount = filtered.filter(f => { const s = f.outRecord?.status || f.inRecord?.status; return s === "Absent"; }).length;
+  const statHalfDayCount = filtered.filter(f => { const s = f.outRecord?.status || f.inRecord?.status; return s === "Half Day"; }).length;
+  const statInCount = filtered.filter(f => f.inRecord).length;
+  const statOutCount = filtered.filter(f => f.outRecord).length;
+
+  return (
+    <div className="attendance-list-page" style={{ padding: '0px', background: '#f9fafb', height: '100%', flex: 1, overflowY: 'auto', fontFamily: 'Inter, sans-serif' }}>
+      
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', padding: '15px 20px', background: 'white', borderBottom: '1px solid #e5e7eb' }}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#111827' }}>Attendance Summary</h2>
+        <div style={{ display: 'flex', gap: '20px', fontSize: '13px', color: '#2563eb', fontWeight: 600 }}>
+          {userRole === "admin" && selectedIds.length > 0 && (
+             <span style={{ cursor: 'pointer', color: '#ef4444' }} onClick={handleBulkDelete}>
+               <i className="ri-delete-bin-line"></i> Delete ({selectedIds.length})
+             </span>
+          )}
+          <span style={{ cursor: 'pointer' }}><i className="ri-error-warning-line"></i> Unprocessed Logs</span>
+          <span style={{ cursor: 'pointer' }}><i className="ri-download-2-line"></i> Daily Report</span>
+          <span style={{ cursor: 'pointer' }}><i className="ri-settings-3-line"></i> Settings</span>
+        </div>
+      </div>
+
+      {/* Top Summary Card */}
+      <div style={{ background: 'white', borderRadius: '8px', border: '1px solid #e5e7eb', padding: '20px', margin: '20px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', fontSize: '14px', fontWeight: 600, color: '#374151', padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}>
+            <i className="ri-arrow-left-s-line" style={{ cursor: 'pointer', fontSize: '16px' }} onClick={() => handleDateChange(-1)}></i>
+            <span>{getFormattedDate()}</span>
+            <i className="ri-calendar-line" style={{ color: '#9ca3af', marginLeft: '5px' }}></i>
+            <i className="ri-arrow-right-s-line" style={{ cursor: 'pointer', fontSize: '16px' }} onClick={() => handleDateChange(1)}></i>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#6b7280' }}><span style={{ color: '#ef4444' }}>●</span> Total Pending for Approval : 0</span>
+            <button style={{ background: '#2563eb', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Review</button>
+          </div>
+          <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setEndDate(e.target.value); }} style={{ opacity: 0, position: 'absolute', pointerEvents: 'none' }} />
+        </div>
+
+        {/* Stats Row */}
+        <div style={{ display: 'flex', gap: '40px', overflowX: 'auto', paddingBottom: '20px', whiteSpace: 'nowrap', borderBottom: '1px solid #e5e7eb', marginBottom: '20px' }}>
+          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Total Staff <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statTotalStaff}</div></div>
+          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Present <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statPresentCount}</div></div>
+          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Absent <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statAbsentCount}</div></div>
+          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Half Day <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statHalfDayCount}</div></div>
+          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Overtime Hours <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>0h 0m</div></div>
+          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Fine hours <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>0h 0m</div></div>
+          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Leave <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>0</div></div>
+          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Punched In <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statInCount}</div></div>
+          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Punched Out <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statOutCount}</div></div>
+        </div>
+        
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '30px', fontSize: '14px', fontWeight: 600, color: '#2563eb' }}>
+          {userRole === "admin" && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowAddModal(true)}>
+               <i className="ri-group-line" style={{ fontSize: '18px' }}></i> Bulk Add Attendance
             </div>
-            <button style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 12px', background: 'white', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>
-              <i className="ri-download-2-line"></i> Download
-            </button>
-            <i className="ri-settings-3-line" style={{ cursor: 'pointer', color: '#3b82f6', fontSize: '1.1rem' }}></i>
-            {userRole === "admin" && (
-              <button onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>
-                <i className="ri-add-line"></i> Add
-              </button>
-            )}
-            {selectedIds.length > 0 && userRole === "admin" && (
-              <button onClick={handleBulkDelete} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>
-                <i className="ri-delete-bin-line"></i> ({selectedIds.length})
-              </button>
-            )}
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+             <i className="ri-briefcase-4-line" style={{ fontSize: '18px' }}></i> Bulk Add Work (Work Basis)
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+             <i className="ri-money-rupee-circle-line" style={{ fontSize: '18px' }}></i> Fine
           </div>
         </div>
       </div>
 
+      {/* Search & Filter */}
+      <div style={{ display: 'flex', gap: '15px', margin: '0 20px 30px 20px' }}>
+         <div style={{ position: 'relative', width: '400px' }}>
+            <i className="ri-search-line" style={{ position: 'absolute', left: '15px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }}></i>
+            <input 
+               type="text" 
+               placeholder="Search Staff by Name, Phone Number or" 
+               value={search}
+               onChange={(e) => setSearch(e.target.value)}
+               style={{ width: '100%', padding: '12px 15px 12px 40px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', outline: 'none' }} 
+            />
+         </div>
+         <button style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 20px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', fontWeight: 600, cursor: 'pointer', fontSize: '14px' }}>
+            <i className="ri-filter-3-fill"></i> Filter
+         </button>
+      </div>
+
+      {/* List Subtitle */}
+      <div style={{ margin: '0 20px 15px 20px', fontSize: '15px', fontWeight: 700, color: '#374151', display: 'flex', alignItems: 'center', gap: '10px' }}>
+         Monthly Regular 
+         <span style={{ background: '#e5e7eb', padding: '2px 10px', borderRadius: '12px', fontSize: '13px', color: '#4b5563' }}>{filtered.length}</span>
+      </div>
+
       {loading ? (
-        <div className="loading">Loading...</div>
+        <div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>
       ) : (
-        <>
-          {/* TABLE */}
-          <div className="table-wrap">
-            <table className="attendance-table">
-              <thead>
-                <tr>
-                  <th>
-                    {userRole === "admin" && (
-                      <input
-                        type="checkbox"
-                        onChange={handleSelectAll}
-                        checked={filtered.length > 0 && selectedIds.length === filtered.length}
-                      />
-                    )}
-                  </th>
-                  {userRole === "admin" && <th>Name</th>}
-                  <th>Date</th>
-                  <th>Type</th>
-                  <th>Device ID</th>
-                  <th>In Address</th>
-                  <th>Out Address</th>
-                  <th>IN Time</th>
-                  <th>OUT Time</th>
-                  <th>Working Hours</th>
-                  <th>Status</th>
-                  <th>Remarks</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
+        <div style={{ margin: '0 20px' }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: '20px', textAlign: 'center', background: 'white', borderRadius: '8px', border: '1px solid #e5e7eb' }}>No records found</div>
+          ) : (
+            filtered.map((r) => {
+              const rowKey = `${r.userId}_${r.dateStr}`;
+              const st = r.outRecord?.status || r.inRecord?.status;
+              const isPresent = st === "Present" || st === "Full Day";
+              const isAbsent = st === "Absent";
+              const isHalfDay = st === "Half Day";
+              
+              let inTimeStr = "-";
+              if (r.inRecord?.deviceTime) {
+                inTimeStr = new Date(r.inRecord.deviceTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+              }
+              let outTimeStr = "-";
+              if (r.outRecord?.deviceTime) {
+                outTimeStr = new Date(r.outRecord.deviceTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+              }
+              
+              let hrsStr = "- Hrs";
+              if (r.outRecord?.workingHours) {
+                const decimal = parseFloat(r.outRecord.workingHours);
+                let hrs = Math.floor(decimal);
+                let mins = Math.round((decimal - hrs) * 60);
+                if (mins === 60) { hrs += 1; mins = 0; }
+                hrsStr = `${hrs}:${mins.toString().padStart(2, '0')} Hrs`;
+              }
 
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} style={{ textAlign: "center" }}>
-                      No records found
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map((r) => {
-                    const rowKey = `${r.userId}_${r.dateStr}`;
-                    const hasIn = r.inRecord != null;
-                    const hasOut = r.outRecord != null;
+              return (
+                <div key={rowKey} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '20px', marginBottom: '12px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                  {/* Left Section */}
+                  <div style={{ display: 'flex', gap: '15px' }}>
+                     {/* No Checkbox by default unless admin, optionally hidden for now or keep */}
+                     {userRole === "admin" && (
+                        <div style={{ paddingTop: '2px' }}>
+                           <input type="checkbox" checked={selectedIds.includes(rowKey)} onChange={(e) => handleSelectOne(e, rowKey)} style={{ width: '16px', height: '16px', accentColor: '#2563eb', cursor: 'pointer' }} />
+                        </div>
+                     )}
+                     <div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '8px', textTransform: 'uppercase' }}>
+                           {userRole === "admin" ? (
+                              <Link to={`/dashboard/attendance/${r.userId}?date=${r.dateStr}`} style={{ color: '#111827', textDecoration: 'none' }}>
+                                 {r.userDetails?.name || "-"}
+                              </Link>
+                           ) : (
+                              r.userDetails?.name || "-"
+                           )}
+                           <span style={{ color: '#9ca3af', fontWeight: 400, marginLeft: '8px', textTransform: 'none' }}>{r.userDetails?.employeeId || `EP-S-${r.userId.slice(-3)}`}</span>
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#4b5563', marginBottom: '4px', fontWeight: 500 }}>
+                           {hrsStr}
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+                           1 Shift (s) <i className="ri-information-line"></i>
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#2563eb', fontWeight: 600, display: 'flex', gap: '10px' }}>
+                           <span style={{ cursor: 'pointer' }} onClick={() => handleEdit(r)}>Add Note - Logs (Edit)</span>
+                           {userRole === "admin" && (
+                              <span style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => handleDelete(r)}>Delete</span>
+                           )}
+                        </div>
+                     </div>
+                  </div>
 
-                    return (
-                      <tr key={rowKey}>
-                        <td>
-                          {userRole === "admin" && (
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.includes(rowKey)}
-                              onChange={(e) => handleSelectOne(e, rowKey)}
-                            />
-                          )}
-                        </td>
-                        {/* NAME → CLICKABLE LINK (Only for Admin) */}
-                        {userRole === "admin" && (
-                          <td className="name-cell">
-                            <Link
-                              to={`/dashboard/attendance/${r.userId}?date=${r.dateStr}`}
-                              style={{
-                                color: "#2563eb",
-                                textDecoration: "underline",
-                                fontWeight: "500",
-                              }}
-                            >
-                              {r.userDetails?.name || "-"}
-                            </Link>
-                          </td>
-                        )}
+                  
+                  {/* Right Section (Status Grid) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '400px' }}>
+                     <div 
+                        onClick={() => handleQuickMark(r.userId, 'Present', r.dateStr)}
+                        style={{ 
+                           background: isPresent ? '#dcfce7' : '#f9fafb', 
+                           border: isPresent ? '1px solid #16a34a' : '1px solid #e5e7eb', 
+                           padding: '10px 15px', borderRadius: '6px', fontSize: '13px', 
+                           color: isPresent ? '#166534' : '#6b7280', 
+                           fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px',
+                           cursor: userRole === 'admin' ? 'pointer' : 'default',
+                           transition: 'all 0.2s'
+                        }}
+                        onMouseOver={(e) => userRole === 'admin' && (e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)')}
+                        onMouseOut={(e) => (e.currentTarget.style.boxShadow = 'none')}
+                     >
+                        <strong style={{ color: isPresent ? '#16a34a' : '#374151' }}>P |</strong> {isPresent ? `${inTimeStr} - ${outTimeStr}` : 'Present'}
+                     </div>
+                     <div 
+                        onClick={() => handleQuickMark(r.userId, 'Half Day', r.dateStr)}
+                        style={{ 
+                           background: isHalfDay ? '#fef9c3' : '#f9fafb', 
+                           border: isHalfDay ? '1px solid #eab308' : '1px solid #e5e7eb', 
+                           padding: '10px 15px', borderRadius: '6px', fontSize: '13px', 
+                           color: isHalfDay ? '#854d0e' : '#6b7280', 
+                           fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px',
+                           cursor: userRole === 'admin' ? 'pointer' : 'default',
+                           transition: 'all 0.2s'
+                        }}
+                        onMouseOver={(e) => userRole === 'admin' && (e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)')}
+                        onMouseOut={(e) => (e.currentTarget.style.boxShadow = 'none')}
+                     >
+                        <strong style={{ color: isHalfDay ? '#eab308' : '#374151' }}>HD |</strong> Half Day
+                     </div>
+                     <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', padding: '10px 15px', borderRadius: '6px', fontSize: '13px', color: '#6b7280', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <strong style={{ color: '#374151' }}>F |</strong> Fine
+                     </div>
+                     <div 
+                        onClick={() => handleQuickMark(r.userId, 'Absent', r.dateStr)}
+                        style={{ 
+                           background: isAbsent ? '#fee2e2' : '#f9fafb', 
+                           border: isAbsent ? '1px solid #dc2626' : '1px solid #e5e7eb', 
+                           padding: '10px 15px', borderRadius: '6px', fontSize: '13px', 
+                           color: isAbsent ? '#991b1b' : '#6b7280', 
+                           fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px',
+                           cursor: userRole === 'admin' ? 'pointer' : 'default',
+                           transition: 'all 0.2s'
+                        }}
+                        onMouseOver={(e) => userRole === 'admin' && (e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)')}
+                        onMouseOut={(e) => (e.currentTarget.style.boxShadow = 'none')}
+                     >
+                        <strong style={{ color: isAbsent ? '#dc2626' : '#374151' }}>A |</strong> Absent
+                     </div>
+                     <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', padding: '10px 15px', borderRadius: '6px', fontSize: '13px', color: '#6b7280', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <strong style={{ color: '#374151' }}>OT |</strong> Overtime
+                     </div>
+                     <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', padding: '10px 15px', borderRadius: '6px', fontSize: '13px', color: '#6b7280', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <strong style={{ color: '#374151' }}>L |</strong> Leave
+                     </div>
+                  </div>
 
-                        {/* DATE */}
-                        <td className="date-cell">{r.dateStr}</td>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
-                        {/* TYPE */}
-                        <td>
-                          <div style={{ display: "flex", gap: "4px", flexDirection: "column" }}>
-                            {hasIn  && <span className="badge-in">IN</span>}
-                            {hasOut && <span className="badge-out">OUT</span>}
-                          </div>
-                        </td>
+      {/* Pagination */}
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', padding: '20px' }}>
+        <button onClick={handlePrev} disabled={page <= 1} style={{ padding: '8px 20px', background: 'white', border: '1px solid #d1d5db', borderRadius: '6px', cursor: page <= 1 ? 'not-allowed' : 'pointer', fontWeight: 600 }}>Prev</button>
+        <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>Page {page} / {Math.max(1, Math.ceil(total / limit))}</span>
+        <button onClick={handleNext} disabled={page >= Math.ceil(total / limit)} style={{ padding: '8px 20px', background: 'white', border: '1px solid #d1d5db', borderRadius: '6px', cursor: page >= Math.ceil(total / limit) ? 'not-allowed' : 'pointer', fontWeight: 600 }}>Next</button>
+      </div>
 
-                        {/* DEVICE ID */}
-                        <td className="device-id-cell">
-                          <span title={r.inRecord?.deviceId || r.outRecord?.deviceId || "-"}>
-                            {r.inRecord?.deviceId || r.outRecord?.deviceId || "-"}
-                          </span>
-                        </td>
-
-                        {/* IN ADDRESS */}
-                        <td className="address-cell" title={r.inRecord?.address || "-"}>
-                          {r.inRecord?.address || "-"}
-                        </td>
-
-                        {/* OUT ADDRESS */}
-                        <td className="address-cell" title={r.outRecord?.address || "-"}>
-                          {r.outRecord?.address || "-"}
-                        </td>
-
-                        {/* IN TIME */}
-                        <td className="time-cell">
-                          {r.inRecord?.deviceTime
-                            ? new Date(r.inRecord.deviceTime).toLocaleTimeString()
-                            : "-"}
-                        </td>
-
-                        {/* OUT TIME */}
-                        <td className="time-cell">
-                          {r.outRecord?.deviceTime
-                            ? new Date(r.outRecord.deviceTime).toLocaleTimeString()
-                            : "-"}
-                        </td>
-
-                        {/* WORKING HOURS */}
-                        <td>
-                          {r.outRecord?.workingHours
-                            ? (() => {
-                              const decimal = parseFloat(r.outRecord.workingHours);
-                              let hrs = Math.floor(decimal);
-                              let mins = Math.round((decimal - hrs) * 60);
-                              if (mins === 60) {
-                                hrs += 1;
-                                mins = 0;
-                              }
-                              return `${hrs}:${mins.toString().padStart(2, '0')} hrs`;
-                            })()
-                            : "-"}
-                        </td>
-
-                        {/* STATUS */}
-                        <td>
-                          {(() => {
-                            const st = r.outRecord?.status || r.inRecord?.status || "Present";
-                            const cls = st === "Half Day" ? "status-halfday"
-                              : st === "Absent"   ? "status-absent"
-                              : st === "Full Day" ? "status-fullday"
-                              : "status-present";
-                            return <span className={`status-pill ${cls}`}>{st}</span>;
-                          })()}
-                        </td>
-
-                        {/* REMARKS */}
-                        <td className="remarks-cell" title={r.outRecord?.remarks || r.inRecord?.remarks || "-"}>
-                          {(() => {
-                            const text = r.outRecord?.remarks || r.inRecord?.remarks || "-";
-                            return text.length > 30 ? text.substring(0, 30) + '...' : text;
-                          })()}
-                        </td>
-
-                        {/* ACTIONS */}
-                        <td style={{ whiteSpace: 'nowrap' }}>
-                          {userRole === "admin" && (
-                            <div style={{ display: 'flex', gap: '5px' }}>
-                              <button className="action-btn action-btn-edit" onClick={() => handleEdit(r)}>
-                                ✎ Edit
-                              </button>
-                              <button className="action-btn action-btn-delete" onClick={() => handleDelete(r)}>
-                                ✕ Delete
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* PAGINATION */}
-          <div className="pager">
-            <button onClick={handlePrev} disabled={page <= 1}>Prev</button>
-            <span>Page {page} / {Math.max(1, Math.ceil(total / limit))}</span>
-            <button onClick={handleNext} disabled={page >= Math.ceil(total / limit)}>Next</button>
-          </div>
-        </>
-      )
-      }
 
       {/* Edit Modal */}
       {
