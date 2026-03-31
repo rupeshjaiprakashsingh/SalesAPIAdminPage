@@ -16,6 +16,45 @@ const getToken = () => {
     }
 };
 
+// Helper to remove spiderweb jitter visually
+const calcDistMeters = (lat1, lon1, lat2, lon2) => {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+    const R = 6371e3; // meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+};
+
+const getSmoothedPath = (route) => {
+    if (!route || route.length === 0) return [];
+    const validRoute = route.filter(p => p.lat != null && p.lng != null && !isNaN(Number(p.lat)) && !isNaN(Number(p.lng)));
+    if (validRoute.length === 0) return [];
+
+    const smoothed = [{ lat: Number(validRoute[0].lat), lng: Number(validRoute[0].lng), time: validRoute[0].time }];
+    for (let i = 1; i < validRoute.length; i++) {
+        const pt = validRoute[i];
+        const last = smoothed[smoothed.length - 1];
+        const lat = Number(pt.lat), lng = Number(pt.lng);
+        const dist = calcDistMeters(last.lat, last.lng, lat, lng);
+
+        if (pt.time && last.time) {
+            const elapsedSec = (new Date(pt.time) - new Date(last.time)) / 1000;
+            if (elapsedSec > 0 && dist / elapsedSec > 42) continue; // ~150 km/h max
+        }
+
+        if (dist > 25) { // 25m threshold
+            smoothed.push({ lat, lng, time: pt.time });
+        }
+    }
+    const lastPt = validRoute[validRoute.length - 1];
+    const lastSmoothed = smoothed[smoothed.length - 1];
+    if (lastSmoothed.lat !== Number(lastPt.lat) || lastSmoothed.lng !== Number(lastPt.lng)) {
+        smoothed.push({ lat: Number(lastPt.lat), lng: Number(lastPt.lng), time: lastPt.time });
+    }
+    return smoothed;
+};
+
 const GeoDashboard = () => {
     const [activeTab, setActiveTab] = useState("Timeline");
     const tabs = ["Live Tracking", "Timeline", "Dashboard", "Reports", "Settings", "How To Use"];
@@ -36,6 +75,49 @@ const GeoDashboard = () => {
     const [timelineLoading, setTimelineLoading] = useState(false);
     const [timelineMapInstance, setTimelineMapInstance] = useState(null);
     const [timelineEvents, setTimelineEvents] = useState([]);
+    const [timelineSearch, setTimelineSearch] = useState("");
+    const [isTimelineDropdownOpen, setIsTimelineDropdownOpen] = useState(false);
+    
+    // Playback logic states
+    const [playbackState, setPlaybackState] = useState({
+        isPlaying: false,
+        speed: 1,
+        currentIndex: 0
+    });
+
+    const smoothedTimelinePath = React.useMemo(() => {
+        if (!timelineReport || !timelineReport.route || timelineReport.route.length === 0) return [];
+        return getSmoothedPath(timelineReport.route);
+    }, [timelineReport]);
+
+    useEffect(() => {
+        setPlaybackState({ isPlaying: false, speed: 1, currentIndex: 0 });
+    }, [timelineReport]);
+
+    useEffect(() => {
+        let timer;
+        if (playbackState.isPlaying && smoothedTimelinePath.length > 0) {
+            timer = setInterval(() => {
+                setPlaybackState(prev => {
+                    let maxIdx = smoothedTimelinePath.length - 1;
+                    if (prev.currentIndex >= maxIdx) {
+                        return { ...prev, isPlaying: false };
+                    }
+                    let nextIdx = prev.currentIndex + prev.speed;
+                    if (nextIdx > maxIdx) nextIdx = maxIdx;
+                    return { ...prev, currentIndex: nextIdx };
+                });
+            }, 300);
+        }
+        return () => clearInterval(timer);
+    }, [playbackState.isPlaying, playbackState.speed, smoothedTimelinePath.length]);
+
+    useEffect(() => {
+        if (playbackState.isPlaying && timelineMapInstance && smoothedTimelinePath.length > 0) {
+            const pt = smoothedTimelinePath[playbackState.currentIndex];
+            if (pt) timelineMapInstance.panTo({lat: pt.lat, lng: pt.lng});
+        }
+    }, [playbackState.currentIndex, playbackState.isPlaying, timelineMapInstance, smoothedTimelinePath]);
 
     // ─── Dashboard Tab State ──────────────────────────────────────
     const [dashboardDate, setDashboardDate] = useState(todayStr);
@@ -322,6 +404,13 @@ const GeoDashboard = () => {
         return { h, m };
     };
 
+    const formatTimeStr = (mins) => {
+        if (!mins || isNaN(mins)) return "0 hrs 0 mins";
+        const h = Math.floor(mins / 60);
+        const m = Math.floor(mins % 60);
+        return `${h} hrs ${m} mins`;
+    };
+
     const onTimelineUnmount = useCallback(function callback(map) {
         setTimelineMapInstance(null);
     }, []);
@@ -341,175 +430,137 @@ const GeoDashboard = () => {
     // ─── Render functions ─────────────────────────────────────────────
 
     const renderDashboard = () => {
-        const tableData = dashboardStats.data || [];
-        const filteredData = tableData.filter(u => 
-            u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            (u.employeeId && u.employeeId.toLowerCase().includes(searchQuery.toLowerCase()))
-        );
-
-        // Sorting by distance to get "Top Performers"
-        const topPerformers = [...tableData].sort((a,b) => (b.totalDistance||0) - (a.totalDistance||0)).slice(0, 5);
-        const maxDist = topPerformers.length > 0 ? (topPerformers[0].totalDistance || 1) : 1;
-
-        const totalEmps = usersList.length;
-        const punchedIn = tableData.length;
-        const notMarked = Math.max(0, totalEmps - punchedIn);
-        const punchedOut = tableData.filter(u => u.idleTime > 60).length; // mock active inactive punch out
-        
-        // Mock Last 7 days chart array (Orders Received)
-        const last7Days = Array.from({length: 7}).map((_, i) => {
-             const d = new Date();
-             d.setDate(d.getDate() - (6 - i));
-             return { date: d.toLocaleDateString('en-GB', {day: 'numeric', month: 'short'}), value: Math.floor(Math.random() * 8) };
-        });
+        const todayData = dashboardStats.data || [];
+        const summary = dashboardStats.summary || {};
 
         return (
-            <div className="geo-dashboard-layout">
-                 {/* Main Column */}
-                 <div className="geo-main-col">
-                      {/* Top Stat Cards */}
-                      <div className="geo-stats-row">
-                          <div className="geo-stat-card green">
-                              <span className="stat-card-title">Total Employees <i className="ri-group-line text-green" style={{fontSize: '14px'}}></i></span>
-                              <span className="stat-card-value">{totalEmps}</span>
-                          </div>
-                          <div className="geo-stat-card purple">
-                              <span className="stat-card-title">Not Marked <i className="ri-error-warning-line text-purple" style={{fontSize: '14px'}}></i></span>
-                              <span className="stat-card-value">{notMarked}</span>
-                          </div>
-                          <div className="geo-stat-card purple">
-                              <span className="stat-card-title">Punched In <i className="ri-login-circle-line text-purple" style={{fontSize: '14px'}}></i></span>
-                              <span className="stat-card-value">{punchedIn}</span>
-                          </div>
-                          <div className="geo-stat-card blue">
-                              <span className="stat-card-title">Punched Out <i className="ri-logout-circle-line text-blue" style={{fontSize: '14px'}}></i></span>
-                              <span className="stat-card-value">{punchedOut}</span>
-                          </div>
-                      </div>
-                      
-                      {/* Orders Overview Today */}
-                      <div className="geo-card-v2">
-                           <div className="geo-card-header-v2">Orders Overview Today</div>
-                           <div className="geo-empty-state-v2">
-                                <i className="ri-inbox-archive-line" style={{fontSize: '24px', color: '#10b981'}}></i>
-                                <span>No data to list</span>
-                           </div>
-                      </div>
-                      
-                      {/* Orders Received chart */}
-                      <div className="geo-card-v2">
-                           <div className="geo-card-header-v2">Orders Received</div>
-                           <div className="geo-card-subtitle-v2">Orders added by your staff or created by you will appear here</div>
-                           <div className="chart-bar-container">
-                               {last7Days.map((d, idx) => (
-                                    <div key={idx} className="chart-bar" style={{height: `${Math.max(5, (d.value / 8) * 100)}%`}}>
-                                        <div className="chart-bar-label">{d.date}</div>
-                                    </div>
-                               ))}
-                           </div>
-                      </div>
-                      
-                      {/* Tasks Overview */}
-                      <div className="geo-card-v2">
-                           <div className="geo-card-header-v2">Tasks Overview</div>
-                           <div className="geo-tasks-list" style={{width: '200px'}}>
-                               <div className="geo-task-item"><span className="geo-task-item-label"><div style={{width:'4px',height:'12px',background:'#9ca3af'}}></div> Total Tasks</span> <span className="geo-task-item-value">0</span></div>
-                               <div className="geo-task-item"><span className="geo-task-item-label"><div style={{width:'4px',height:'12px',background:'#fbbf24'}}></div> Not yet Started</span> <span className="geo-task-item-value">0</span></div>
-                               <div className="geo-task-item"><span className="geo-task-item-label"><div style={{width:'4px',height:'12px',background:'#ef4444'}}></div> Delayed Tasks</span> <span className="geo-task-item-value">0</span></div>
-                               <div className="geo-task-item"><span className="geo-task-item-label"><div style={{width:'4px',height:'12px',background:'#3b82f6'}}></div> In-progress</span> <span className="geo-task-item-value">0</span></div>
-                               <div className="geo-task-item"><span className="geo-task-item-label"><div style={{width:'4px',height:'12px',background:'#10b981'}}></div> Completed Tasks</span> <span className="geo-task-item-value">0</span></div>
-                           </div>
-                      </div>
-                      
-                      {/* Top Performers */}
-                      <div className="geo-card-v2">
-                           <div className="geo-card-header-v2">Top Performers</div>
-                           <div className="geo-card-subtitle-v2">Top Performers based on total distance logged</div>
-                           <div style={{display: 'flex', flexDirection: 'column'}}>
-                               {topPerformers.length === 0 ? (
-                                   <div className="geo-empty-state-v2" style={{height: '100px'}}>No Tracking Data Available to rank</div>
-                               ) : topPerformers.map(p => {
-                                   const perc = Math.min(100, (p.totalDistance / maxDist) * 100);
-                                   return (
-                                     <div key={p.name} className="performer-row">
-                                         <div className="performer-info"><span>{p.name}</span> <span style={{color: '#9ca3af'}}>{p.totalDistance} km</span></div>
-                                         <div className="performer-bar-bg">
-                                             <div className="performer-bar-fill" style={{width: `${perc}%`}}></div>
-                                         </div>
-                                     </div>
-                                   );
-                               })}
-                           </div>
-                      </div>
-                      
-                      {/* Business Overview Table */}
-                      <div className="geo-card-v2">
-                           <div className="geo-card-header-v2">Business Overview</div>
-                           <div className="geo-card-subtitle-v2">See staff punch in / punch out times, status of their tasks, and average task duration</div>
-                           
-                           <div className="geo-table-container">
-                               <table className="geo-table-v2">
-                                   <thead>
-                                       <tr>
-                                           <th>Name</th>
-                                           <th>Emp ID</th>
-                                           <th>Punched In</th>
-                                           <th>Punched Out</th>
-                                           <th>Total Tasks Completed</th>
-                                           <th>Total Orders Added</th>
-                                           <th>Average Task Duration</th>
-                                       </tr>
-                                   </thead>
-                                   <tbody>
-                                       {tableData.length === 0 ? (
-                                           <tr><td colSpan="7" style={{textAlign:'center', padding: '20px'}}>No records found</td></tr>
-                                       ) : tableData.map(u => (
-                                           <tr key={u._id}>
-                                               <td style={{fontWeight: 600, color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                                                   <div style={{width:'24px',height:'24px',background:'#f3f4f6',borderRadius:'50%',display:'flex',justifyContent:'center',alignItems:'center'}}><i className="ri-user-line" style={{fontSize:'12px'}}></i></div>
-                                                   {u.name.toUpperCase()}
-                                               </td>
-                                               <td style={{color: '#9ca3af'}}>{u.employeeId || "-"}</td>
-                                               <td style={{color: '#111827'}}>{u.inTime || "-"}</td>
-                                               <td style={{color: '#111827'}}>{u.outTime || "-"}</td>
-                                               <td>0</td>
-                                               <td>0</td>
-                                               <td>0 mins</td>
-                                           </tr>
-                                       ))}
-                                   </tbody>
-                               </table>
-                           </div>
-                      </div>
-                 </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                
+                {/* Header Row: Title & Action Controls */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#111827' }}>Dashboard</h3>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '4px 8px', gap: '10px' }}>
+                            <i className="ri-arrow-left-s-line" style={{ cursor: 'pointer', color: '#6b7280' }} onClick={() => changeDashboardDate(-1)}></i>
+                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151', minWidth: '100px', textAlign: 'center' }}>
+                                {new Date(dashboardDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </span>
+                            <i className="ri-arrow-right-s-line" style={{ cursor: 'pointer', color: '#6b7280' }} onClick={() => changeDashboardDate(1)}></i>
+                            <i className="ri-calendar-line" style={{ color: '#3b82f6', marginLeft: '4px' }}></i>
+                        </div>
+                        <button 
+                            onClick={() => setDashboardDate(prev => prev + "")}
+                            style={{ width: '36px', height: '36px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '6px', background: '#fff', color: '#6b7280', cursor: 'pointer' }}
+                        >
+                            <i className="ri-refresh-line"></i>
+                        </button>
+                        <button style={{ height: '36px', padding: '0 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <i className="ri-download-2-line"></i> Download Report
+                        </button>
+                    </div>
+                </div>
 
-                 {/* Side Column */}
-                 <div className="geo-side-col">
-                      <div className="geo-card-v2">
-                          <div className="geo-card-header-v2">Customers Overview</div>
-                          <div style={{display:'flex', flexDirection:'column', gap:'16px'}}>
-                              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                                   <div style={{display:'flex', flexDirection:'column', gap:'4px'}}>
-                                        <span style={{fontSize:'11px', color:'#6b7280', fontWeight: 500}}>Customers Added Today <i className="ri-information-line"></i></span>
-                                        <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
-                                             <span style={{color:'#10b981', background:'#ecfdf5', padding:'2px 8px', borderRadius:'12px', fontSize:'9px', fontWeight: 600}}>↗ 0 New Than Yesterday</span>
-                                        </div>
-                                   </div>
-                                   <span style={{fontSize:'20px', fontWeight: 700, color:'#111827'}}>0</span>
-                              </div>
-                              <hr style={{border: 'none', borderTop: '1px dashed #e5e7eb', margin: '8px 0'}} />
-                              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                                   <div style={{display:'flex', flexDirection:'column', gap:'4px'}}>
-                                        <span style={{fontSize:'11px', color:'#6b7280', fontWeight: 500}}>Customers Served Today <i className="ri-information-line"></i></span>
-                                        <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
-                                             <span style={{color:'#ef4444', background:'#fef2f2', padding:'2px 8px', borderRadius:'12px', fontSize:'9px', fontWeight: 600}}>↘ 0 Less Than Yesterday</span>
-                                        </div>
-                                   </div>
-                                   <span style={{fontSize:'20px', fontWeight: 700, color:'#111827'}}>0</span>
-                              </div>
-                          </div>
-                      </div>
-                 </div>
+                {/* Metric Summary Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                    <div style={{ background: '#f4fdf8', border: '1px solid #e5ffe7', borderRadius: '8px', padding: '16px', position: 'relative' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>Total Distance</div>
+                        <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#111827' }}>{summary.totalDistance || "0"} kms</div>
+                        <i className="ri-route-line" style={{ position: 'absolute', right: '16px', top: '16px', fontSize: '1.2rem', color: '#10b981' }}></i>
+                    </div>
+                    <div style={{ background: '#fcfaff', border: '1px solid #f6f0ff', borderRadius: '8px', padding: '16px', position: 'relative' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>Total Time</div>
+                        <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#111827' }}>{formatTimeStr(summary.totalTime)}</div>
+                        <i className="ri-time-line" style={{ position: 'absolute', right: '16px', top: '16px', fontSize: '1.2rem', color: '#8b5cf6' }}></i>
+                    </div>
+                    <div style={{ background: '#fffcfc', border: '1px solid #fff0f5', borderRadius: '8px', padding: '16px', position: 'relative' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', flexDirection: 'column' }}>
+                            <span>Total Time</span>
+                            <span style={{fontSize: '0.7rem', fontWeight: 400, color: '#6b7280'}}>Spent in Motion</span>
+                        </div>
+                        <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#111827' }}>{formatTimeStr(summary.totalMotionTime)}</div>
+                        <i className="ri-pin-distance-line" style={{ position: 'absolute', right: '16px', top: '16px', fontSize: '1.2rem', color: '#d946ef' }}></i>
+                    </div>
+                    <div style={{ background: '#f8fbff', border: '1px solid #eff6ff', borderRadius: '8px', padding: '16px', position: 'relative' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '12px', display: 'flex', flexDirection: 'column' }}>
+                            <span>Total Time</span>
+                            <span style={{fontSize: '0.7rem', fontWeight: 400, color: '#6b7280'}}>Spent in Rest</span>
+                        </div>
+                        <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#111827' }}>{formatTimeStr(summary.totalIdleTime)}</div>
+                        <i className="ri-history-line" style={{ position: 'absolute', right: '16px', top: '16px', fontSize: '1.2rem', color: '#3b82f6' }}></i>
+                    </div>
+                </div>
+
+                {/* Tracking Data Table Card */}
+                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                    
+                    {/* Toolbar */}
+                    <div style={{ padding: '16px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '0 12px', width: '300px' }}>
+                                <i className="ri-search-line" style={{ color: '#9ca3af', fontSize: '1rem' }}></i>
+                                <input 
+                                    type="text" 
+                                    placeholder="Search by name or staff ID"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    style={{ border: 'none', background: 'transparent', outline: 'none', padding: '10px 8px', fontSize: '0.85rem', width: '100%', color: '#374151' }}
+                                />
+                            </div>
+                            <button style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 12px', height: '38px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.85rem', color: '#374151', cursor: 'pointer' }}>
+                                <i className="ri-filter-3-line" style={{ color: '#3b82f6' }}></i> Filter
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Table */}
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                            <thead>
+                                <tr style={{ background: '#fdfdfd', borderBottom: '1px solid #f3f4f6' }}>
+                                    <th style={{ padding: '14px 20px', fontSize: '0.75rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' }}>Name</th>
+                                    <th style={{ padding: '14px 20px', fontSize: '0.75rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' }}>Status</th>
+                                    <th style={{ padding: '14px 20px', fontSize: '0.75rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' }}>Total Distance</th>
+                                    <th style={{ padding: '14px 20px', fontSize: '0.75rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' }}>Total Time</th>
+                                    <th style={{ padding: '14px 20px', fontSize: '0.75rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' }}>Total Time In Motion</th>
+                                    <th style={{ padding: '14px 20px', fontSize: '0.75rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' }}>Total Time At Rest</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {dashboardLoading ? (
+                                    <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>Fetching dashboard data...</td></tr>
+                                ) : (todayData.filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0) ? (
+                                    <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>No tracking data found for this date</td></tr>
+                                ) : todayData.filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase())).map((u, idx) => (
+                                    <tr key={idx} style={{ borderBottom: '1px solid #f9fafb' }}>
+                                        <td style={{ padding: '14px 20px' }}>
+                                            <div 
+                                                style={{ display: 'flex', flexDirection: 'column', gap: '2px', cursor: 'pointer' }}
+                                                onClick={() => {
+                                                    setTimelineUser(u._id);
+                                                    setTimelineDate(dashboardDate);
+                                                    setActiveTab("Timeline");
+                                                }}
+                                            >
+                                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6', textTransform: 'uppercase' }} title="View Timeline">{u.name}</span>
+                                                {u.employeeId && <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{u.employeeId}</span>}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '14px 20px' }}>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: (u.totalDistance > 0) ? '#10b981' : '#eab308' }}>
+                                                {(u.totalDistance > 0) ? 'Traveled' : 'Not Traveled'}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '14px 20px', fontSize: '0.85rem', color: '#4b5563' }}>{Number(u.totalDistance || 0).toFixed(1)} kms</td>
+                                        <td style={{ padding: '14px 20px', fontSize: '0.85rem', color: '#4b5563' }}>{formatTimeStr(u.totalTime)}</td>
+                                        <td style={{ padding: '14px 20px', fontSize: '0.85rem', color: '#4b5563' }}>{formatTimeStr(u.motionTime)}</td>
+                                        <td style={{ padding: '14px 20px', fontSize: '0.85rem', color: '#4b5563' }}>{formatTimeStr(u.idleTime)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
             </div>
         );
     };
@@ -603,66 +654,58 @@ const GeoDashboard = () => {
     const renderTimeline = () => {
         const selUserName = usersList.find(u => u._id === timelineUser)?.name || "Select User";
         
-        // Helper to remove spiderweb jitter visually
-        const calcDistMeters = (lat1, lon1, lat2, lon2) => {
-            if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
-            const R = 6371e3; // meters
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-        };
-
-        const getSmoothedPath = (route) => {
-             if (!route || route.length === 0) return [];
-             // Filter out invalid coordinates first
-             const validRoute = route.filter(p => p.lat != null && p.lng != null && !isNaN(Number(p.lat)) && !isNaN(Number(p.lng)));
-             if (validRoute.length === 0) return [];
-
-             // Defense-in-depth: server already cleans data, but apply a final pass
-             // to remove any remaining visual jitter or outliers
-             const smoothed = [{ lat: Number(validRoute[0].lat), lng: Number(validRoute[0].lng), time: validRoute[0].time }];
-             for (let i = 1; i < validRoute.length; i++) {
-                 const pt = validRoute[i];
-                 const last = smoothed[smoothed.length - 1];
-                 const lat = Number(pt.lat), lng = Number(pt.lng);
-                 const dist = calcDistMeters(last.lat, last.lng, lat, lng);
-
-                 // Speed sanity check: reject impossible jumps (> ~150 km/h)
-                 if (pt.time && last.time) {
-                     const elapsedSec = (new Date(pt.time) - new Date(last.time)) / 1000;
-                     if (elapsedSec > 0 && dist / elapsedSec > 42) continue; // ~150 km/h max
-                 }
-
-                 if (dist > 25) { // 25m threshold — removes idle jitter while keeping real movement
-                     smoothed.push({ lat, lng, time: pt.time });
-                 }
-             }
-             // Always include last point
-             const lastPt = validRoute[validRoute.length - 1];
-             const lastSmoothed = smoothed[smoothed.length - 1];
-             if (lastSmoothed.lat !== Number(lastPt.lat) || lastSmoothed.lng !== Number(lastPt.lng)) {
-                 smoothed.push({ lat: Number(lastPt.lat), lng: Number(lastPt.lng), time: lastPt.time });
-             }
-             return smoothed;
-        };
+        // Helper and getSmoothedPath elevated to global scope
 
         return (
             <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 160px)', gap: '16px' }}>
                 {/* Timeline Top Controls */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden', background: '#fff' }}>
-                            <select 
-                                value={timelineUser}
-                                onChange={(e) => setTimelineUser(e.target.value)}
-                                style={{ padding: '8px 16px', border: 'none', outline: 'none', background: 'transparent', fontWeight: '500', fontSize: '0.85rem', color: '#374151', cursor: 'pointer', minWidth: '240px' }}
+                        <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                            <div 
+                                onClick={() => setIsTimelineDropdownOpen(!isTimelineDropdownOpen)}
+                                style={{ border: '1px solid #e5e7eb', borderRadius: '6px', background: '#fff', padding: '10px 16px', cursor: 'pointer', minWidth: '300px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
                             >
-                                <option value="">-- Employee --</option>
-                                {usersList.map((usr) => (
-                                    <option key={usr._id} value={usr._id}>{usr.name.toUpperCase()} {usr.employeeId ? `(${usr.employeeId})` : ''}</option>
-                                ))}
-                            </select>
+                                <span style={{ fontWeight: 600, fontSize: '0.8rem', color: '#111827' }}>
+                                    {timelineUser ? (usersList.find(u => u._id === timelineUser)?.name.toUpperCase() + (usersList.find(u => u._id === timelineUser)?.employeeId ? ` (${usersList.find(u => u._id === timelineUser)?.employeeId})` : "")) : "-- Select Staff --"}
+                                </span>
+                                <i className={`ri-arrow-${isTimelineDropdownOpen ? 'up' : 'down'}-s-line`} style={{color: '#9ca3af', fontSize: '1.2rem'}}></i>
+                            </div>
+
+                            {isTimelineDropdownOpen && (
+                                <div style={{ position: 'absolute', top: '110%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)', zIndex: 100, maxHeight: '340px', display: 'flex', flexDirection: 'column' }}>
+                                    <div style={{ padding: '8px', borderBottom: '1px solid #f3f4f6', background: '#f9fafb', borderRadius: '8px 8px 0 0' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '6px 12px' }}>
+                                            <i className="ri-search-line" style={{ color: '#9ca3af', fontSize: '1rem', marginRight: '8px' }}></i>
+                                            <input 
+                                                autoFocus
+                                                type="text" 
+                                                placeholder="Search by name or staff ID"
+                                                value={timelineSearch}
+                                                onChange={(e) => setTimelineSearch(e.target.value)}
+                                                style={{ border: 'none', outline: 'none', width: '100%', fontSize: '0.85rem', color: '#374151' }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+                                        {usersList.filter(u => `${u.name} ${u.employeeId || ""}`.toLowerCase().includes(timelineSearch.toLowerCase())).map(usr => (
+                                            <div 
+                                                key={usr._id} 
+                                                onClick={() => { setTimelineUser(usr._id); setIsTimelineDropdownOpen(false); setTimelineSearch(""); }}
+                                                style={{ padding: '10px 16px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: timelineUser === usr._id ? '#f8fafc' : '#fff' }}
+                                                onMouseOver={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                                onMouseOut={(e) => e.currentTarget.style.background = timelineUser === usr._id ? '#f8fafc' : '#fff'}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: timelineUser === usr._id ? '#3b82f6' : 'transparent' }}></div>
+                                                    <span style={{ fontSize: '0.8rem', color: '#374151', fontWeight: 500 }}>{usr.name.toUpperCase()} <span style={{ color: '#6b7280', fontWeight: 400 }}>{usr.employeeId ? `(${usr.employeeId})` : ""}</span></span>
+                                                </div>
+                                                <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#eab308' }}>Not Traveled</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden', background: '#fff', color: '#4b5563' }}>
@@ -689,7 +732,7 @@ const GeoDashboard = () => {
                 <div style={{ display: 'flex', flex: 1, gap: '16px', overflow: 'hidden' }}>
                     
                     {/* Left Sidebar */}
-                    <div style={{ width: '360px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <div style={{ width: '300px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                         <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontWeight: 600, color: '#374151', fontSize: '0.9rem' }}>Timeline</span>
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -741,24 +784,24 @@ const GeoDashboard = () => {
                                     </div>
                                     <div style={{ flex: 1, paddingLeft: '8px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <span style={{ fontWeight: 600, fontSize: '0.85rem', color: evt.type === 'Outage' ? '#ef4444' : '#111827' }}>
+                                            <span style={{ fontWeight: 600, fontSize: '0.75rem', color: evt.type === 'Outage' ? '#ef4444' : '#111827' }}>
                                                 {evt.type === 'Start' ? 'Tracking Started' : evt.type}
                                             </span>
                                             {evt.type === 'Drive' && (
-                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
-                                                    <span style={{ fontSize: '0.8rem', color: '#111827', fontWeight: 600 }}>{evt.distanceKm} km</span>
-                                                    <span style={{ color: '#10b981', fontSize: '0.8rem', fontWeight: 600 }}>
+                                                <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline' }}>
+                                                    <span style={{ fontSize: '0.7rem', color: '#111827', fontWeight: 600 }}>{evt.distanceKm} km</span>
+                                                    <span style={{ color: '#10b981', fontSize: '0.75rem', fontWeight: 600 }}>
                                                         {evt.durationMin >= 60 ? `${Math.floor(evt.durationMin/60)}h ${evt.durationMin%60}m` : `${evt.durationMin}m`}
                                                     </span>
                                                 </div>
                                             )}
                                             {evt.type === 'Stop' && (
-                                                <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>
+                                                <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>
                                                     {evt.duration >= 60 ? `${Math.floor(evt.duration/60)}h ${evt.duration%60}m` : `${evt.duration}m`}
                                                 </span>
                                             )}
                                             {evt.type === 'Outage' && (
-                                                <span style={{ fontSize: '0.8rem', color: '#111827', fontWeight: 600 }}>
+                                                <span style={{ fontSize: '0.75rem', color: '#111827', fontWeight: 600 }}>
                                                     {evt.durationMin >= 60 ? `${Math.floor(evt.durationMin/60)}h ${evt.durationMin%60}m` : `${evt.durationMin}m`}
                                                 </span>
                                             )}
@@ -796,16 +839,14 @@ const GeoDashboard = () => {
                                     zoomControl: false
                                 }}
                             >
-                                {timelineReport && timelineReport.route && timelineReport.route.length > 0 && (() => {
-                                    const smoothedPath = getSmoothedPath(timelineReport.route);
-                                    return smoothedPath.length > 1 ? (
+                                {smoothedTimelinePath.length > 1 && (
                                     <>
                                         <Polyline
-                                            path={smoothedPath}
+                                            path={smoothedTimelinePath}
                                             options={{ strokeColor: "#111827", strokeOpacity: 0.9, strokeWeight: 2 }}
                                         />
                                         <Marker
-                                            position={{ lat: Number(timelineReport.route[0].lat), lng: Number(timelineReport.route[0].lng) }}
+                                            position={{ lat: smoothedTimelinePath[0].lat, lng: smoothedTimelinePath[0].lng }}
                                             icon={{
                                                 path: window.google.maps.SymbolPath.CIRCLE,
                                                 scale: 5,
@@ -817,7 +858,7 @@ const GeoDashboard = () => {
                                             label={{ text: "S", color: "white", fontSize: "8px", fontWeight: "bold", className: 'marker-label-offset' }}
                                         />
                                         <Marker
-                                            position={{ lat: Number(timelineReport.route[timelineReport.route.length-1].lat), lng: Number(timelineReport.route[timelineReport.route.length-1].lng) }}
+                                            position={{ lat: smoothedTimelinePath[smoothedTimelinePath.length-1].lat, lng: smoothedTimelinePath[smoothedTimelinePath.length-1].lng }}
                                             icon={{
                                                 path: window.google.maps.SymbolPath.CIRCLE,
                                                 scale: 5,
@@ -827,8 +868,26 @@ const GeoDashboard = () => {
                                                 strokeWeight: 2,
                                             }}
                                         />
+                                        <Marker
+                                            position={{ lat: smoothedTimelinePath[playbackState.currentIndex]?.lat || 0, lng: smoothedTimelinePath[playbackState.currentIndex]?.lng || 0 }}
+                                            icon={{
+                                                path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                                                scale: 7,
+                                                fillColor: '#10b981', 
+                                                fillOpacity: 1,
+                                                strokeColor: '#ffffff',
+                                                strokeWeight: 1,
+                                                rotation: playbackState.currentIndex > 0 
+                                                    ? window.google?.maps?.geometry?.spherical?.computeHeading(
+                                                        new window.google.maps.LatLng(smoothedTimelinePath[playbackState.currentIndex - 1].lat, smoothedTimelinePath[playbackState.currentIndex - 1].lng),
+                                                        new window.google.maps.LatLng(smoothedTimelinePath[playbackState.currentIndex].lat, smoothedTimelinePath[playbackState.currentIndex].lng)
+                                                      ) || 0 
+                                                    : 0
+                                            }}
+                                            zIndex={100}
+                                        />
                                     </>
-                                ) : null;})()}
+                                )}
                             </GoogleMap>
                         ) : (
                             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", background: "#f3f4f6", color: "#6b7280" }}>
@@ -855,14 +914,35 @@ const GeoDashboard = () => {
                         </div>
 
                         {/* Bottom Playback Bar overlay */}
-                        <div style={{ position: 'absolute', bottom: '24px', left: '24px', width: '300px', background: 'rgba(255,255,255,0.95)', padding: '12px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                        <div style={{ position: 'absolute', bottom: '24px', left: '24px', width: '380px', background: 'rgba(255,255,255,0.95)', padding: '12px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
                             <i className="ri-barcode-line" style={{ color: '#9ca3af', cursor: 'pointer', transform: 'rotate(90deg)', fontSize: '1.1rem' }}></i>
-                            <i className="ri-play-circle-line" style={{ color: '#10b981', fontSize: '1.4rem', cursor: 'pointer' }}></i>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#9ca3af', marginLeft: 'auto' }}>
-                                {timelineReport && timelineReport.route.length > 0 ? new Date(timelineReport.route[Math.floor(timelineReport.route.length*0.3)].time).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'}) : '10:20 AM'}
+                            <i 
+                                className={playbackState.isPlaying ? "ri-pause-circle-line" : "ri-play-circle-line"} 
+                                style={{ color: '#10b981', fontSize: '1.4rem', cursor: 'pointer' }}
+                                onClick={() => {
+                                    if (playbackState.currentIndex >= smoothedTimelinePath.length - 1) {
+                                        setPlaybackState(p => ({ ...p, currentIndex: 0, isPlaying: true }));
+                                    } else {
+                                        setPlaybackState(p => ({ ...p, isPlaying: !p.isPlaying }));
+                                    }
+                                }}
+                            ></i>
+                            <input 
+                                type="range" 
+                                min="0" 
+                                max={Math.max(0, smoothedTimelinePath.length - 1)} 
+                                value={playbackState.currentIndex}
+                                onChange={(e) => setPlaybackState(p => ({ ...p, currentIndex: parseInt(e.target.value) }))}
+                                style={{ flex: 1, cursor: 'pointer' }}
+                            />
+                            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#9ca3af', minWidth: '60px', textAlign: 'right' }}>
+                                {smoothedTimelinePath.length > 0 ? new Date(smoothedTimelinePath[playbackState.currentIndex].time).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'}) : '--:--'}
                             </span>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                1X <i className="ri-arrow-down-s-line" style={{ marginLeft: '2px' }}></i>
+                            <span 
+                                style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                                onClick={() => setPlaybackState(p => ({ ...p, speed: p.speed === 1 ? 2 : p.speed === 2 ? 4 : 1 }))}
+                            >
+                                {playbackState.speed}X <i className="ri-arrow-down-s-line" style={{ marginLeft: '2px' }}></i>
                             </span>
                         </div>
                     </div>

@@ -315,6 +315,14 @@ exports.getAllAttendance = async (req, res) => {
       matchStage.userId = new mongoose.Types.ObjectId(req.user.id);
     }
 
+    let dateMatch = {};
+    const { startDate, endDate } = req.query;
+    if (startDate || endDate) {
+      dateMatch.dateStr = {};
+      if (startDate) dateMatch.dateStr.$gte = startDate;
+      if (endDate) dateMatch.dateStr.$lte = endDate;
+    }
+
     // Aggregation pipeline to merge IN/OUT by day
     const pipeline = [
       // Stage 1: Match based on role
@@ -324,10 +332,14 @@ exports.getAllAttendance = async (req, res) => {
       {
         $addFields: {
           dateStr: {
-            $dateToString: { format: "%Y-%m-%d", date: "$deviceTime" }
+            $dateToString: { format: "%Y-%m-%d", date: "$deviceTime", timezone: "+05:30" }
           }
         }
       },
+
+      // Stage 2.5: Filter by Date
+      ...(Object.keys(dateMatch).length > 0 ? [{ $match: dateMatch }] : []),
+
 
       // Stage 3: Sort by deviceTime to ensure proper ordering within groups
       { $sort: { deviceTime: 1 } },

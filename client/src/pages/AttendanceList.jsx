@@ -159,7 +159,7 @@ export default function AttendanceList() {
 
   if (isSingleDate && users.length > 0) {
     baseArray = users.map(user => {
-      const existing = records.find(r => r.userId === user._id || r.userId === user.id);
+      const existing = records.find(r => (r.userId === user._id || r.userId === user.id) && r.dateStr === startDate);
       if (existing) return existing;
 
       return {

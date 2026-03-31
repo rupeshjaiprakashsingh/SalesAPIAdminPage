@@ -751,7 +751,7 @@ exports.getTimelineReport = async (req, res) => {
         const summary = {
             employeeId: userId,
             date,
-            totalDistance: (totalDistance / 1000).toFixed(2), // km
+            totalDistance: Number((totalDistance / 1000).toFixed(2)), // km
             idleTime: Math.round(idleTime),
             motionTime: Math.round(motionTime),
             stopDetails,
@@ -874,7 +874,7 @@ exports.getCalendarReport = async (req, res) => {
                  totalDays,
                  presentDays,
                  absentDays,
-                 totalWorkingHours: totalWorkingHours.toFixed(2),
+                 totalWorkingHours: Number(totalWorkingHours.toFixed(2)),
                  calendarData
             });
         });
@@ -978,7 +978,7 @@ exports.getDashboardStats = async (req, res) => {
                 }
             }
 
-            const finalDistanceKm = (totalDistance / 1000).toFixed(2);
+            const finalDistanceKm = Number((totalDistance / 1000).toFixed(2));
             const totalTime = Math.round(idleTime + motionTime);
             
             systemTotalDistance += parseFloat(finalDistanceKm);
@@ -1000,7 +1000,7 @@ exports.getDashboardStats = async (req, res) => {
             success: true,
             date: date,
             summary: {
-                totalDistance: systemTotalDistance.toFixed(2),
+                totalDistance: Number(systemTotalDistance.toFixed(2)),
                 totalTime: systemMotionTime + systemIdleTime,
                 totalMotionTime: systemMotionTime,
                 totalIdleTime: systemIdleTime
