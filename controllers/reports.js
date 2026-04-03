@@ -738,8 +738,8 @@ exports.getTimelineReport = async (req, res) => {
             previousLog = currentLog;
         }
 
-        // ─── STEP 5: Build clean route from simplified data ────────────
-        const route = simplifiedLogs.map(log => ({
+        // ─── STEP 5: Build route from all clean logs (per user request to plot all locations) ────────────
+        const route = cleanLogs.map(log => ({
             lat: log.latitude,
             lng: log.longitude,
             time: log.timestamp,

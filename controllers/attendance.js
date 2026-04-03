@@ -14,7 +14,7 @@ exports.adminAddAttendance = async (req, res) => {
     }
 
     const { User, Attendance } = req.models;
-    const { userId, status, date, remarks } = req.body;
+    const { userId, status, date, remarks, inTime: customInTime, outTime: customOutTime } = req.body;
 
     if (!userId) {
       return res.status(400).json({ message: "userId is required" });
@@ -36,36 +36,40 @@ exports.adminAddAttendance = async (req, res) => {
     let attendanceDate;
     if (date) {
       // date is expected as YYYY-MM-DD string
-      attendanceDate = new Date(date + "T09:00:00.000Z"); // 9am UTC = 2:30pm IST approx
+      attendanceDate = new Date(date + "T00:00:00.000Z");
     } else {
       const nowIST = new Date(Date.now() + IST_OFFSET);
       const yyyy = nowIST.getUTCFullYear();
       const mm = String(nowIST.getUTCMonth() + 1).padStart(2, '0');
       const dd = String(nowIST.getUTCDate()).padStart(2, '0');
-      attendanceDate = new Date(`${yyyy}-${mm}-${dd}T09:00:00.000Z`);
+      attendanceDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00.000Z`);
     }
 
-    // Working hours by status
-    let workingHours = 0;
-    if (status === "Present") workingHours = 8;
-    else if (status === "Half Day") workingHours = 4;
-    else workingHours = 0;
+    // Window for matching (same day IST)
+    const startOfDay = new Date(attendanceDate);
+    const endOfDay = new Date(attendanceDate);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
-    // Default/placeholder values for required model fields
+    // Working hours by status if not specified
+    let defaultWorkingHours = 0;
+    if (status === "Present") defaultWorkingHours = 8;
+    else if (status === "Half Day") defaultWorkingHours = 4;
+    else defaultWorkingHours = 0;
+
     const DEFAULT_LAT = 0;
     const DEFAULT_LNG = 0;
     const DEFAULT_DEVICE_ID = `admin-manual-${Date.now()}`;
-    const inTime = new Date(attendanceDate.getTime());           // 9:00 AM IST
-    const outTime = new Date(attendanceDate.getTime() + workingHours * 60 * 60 * 1000); // IN + workingHours
 
-    // Build IN record
-    const inRecord = new Attendance({
+    // 1. Handle IN Record
+    let finalInTime = customInTime ? new Date(customInTime) : new Date(attendanceDate.getTime() + 9 * 60 * 60 * 1000); // Default 9 AM IST
+
+    const inUpdatePayload = {
       userId,
       attendanceType: "IN",
       latitude: DEFAULT_LAT,
       longitude: DEFAULT_LNG,
       locationAccuracy: 0,
-      deviceTime: inTime,
+      deviceTime: finalInTime,
       deviceId: DEFAULT_DEVICE_ID,
       address: "Manually added by Admin",
       batteryPercentage: null,
@@ -73,19 +77,35 @@ exports.adminAddAttendance = async (req, res) => {
       remarks: remarks || "Manually added by Admin",
       ipAddress: req.ip,
       validatedInsideGeoFence: false,
-      status: "Present",
-    });
+      status: status === "Absent" ? "Absent" : "Present",
+    };
 
-    // Build OUT record (only if not Absent)
+    const inRecord = await Attendance.findOneAndUpdate(
+      {
+        userId,
+        attendanceType: "IN",
+        deviceTime: { $gte: startOfDay, $lte: endOfDay }
+      },
+      { $set: inUpdatePayload },
+      { upsert: true, new: true }
+    );
+
+    // 2. Handle OUT Record (only if not Absent)
     let outRecord = null;
     if (status !== "Absent") {
-      outRecord = new Attendance({
+      let finalOutTime = customOutTime ? new Date(customOutTime) : new Date(finalInTime.getTime() + defaultWorkingHours * 60 * 60 * 1000);
+      
+      // Calculate working hours
+      const diffMs = finalOutTime.getTime() - finalInTime.getTime();
+      const workingHours = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10; // Round to 1 decimal
+
+      const outUpdatePayload = {
         userId,
         attendanceType: "OUT",
         latitude: DEFAULT_LAT,
         longitude: DEFAULT_LNG,
         locationAccuracy: 0,
-        deviceTime: outTime,
+        deviceTime: finalOutTime,
         deviceId: DEFAULT_DEVICE_ID,
         address: "Manually added by Admin",
         batteryPercentage: null,
@@ -94,18 +114,29 @@ exports.adminAddAttendance = async (req, res) => {
         ipAddress: req.ip,
         validatedInsideGeoFence: false,
         workingHours,
-        status,
-      });
+        status: status,
+      };
+
+      outRecord = await Attendance.findOneAndUpdate(
+        {
+          userId,
+          attendanceType: "OUT",
+          deviceTime: { $gte: startOfDay, $lte: endOfDay }
+        },
+        { $set: outUpdatePayload },
+        { upsert: true, new: true }
+      );
     } else {
-      // For Absent: just an IN record with Absent status
-      inRecord.status = "Absent";
+      // If switching to Absent, remove OUT record if it exists for this day
+      await Attendance.findOneAndDelete({
+        userId,
+        attendanceType: "OUT",
+        deviceTime: { $gte: startOfDay, $lte: endOfDay }
+      });
     }
 
-    await inRecord.save();
-    if (outRecord) await outRecord.save();
-
-    return res.status(201).json({
-      message: `Attendance marked as ${status} for ${targetUser.name}`,
+    return res.status(200).json({
+      message: `Attendance updated as ${status} for ${targetUser.name}`,
       in: inRecord,
       out: outRecord || null,
     });

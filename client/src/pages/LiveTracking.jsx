@@ -1,15 +1,14 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import {
     GoogleMap,
     Marker,
     InfoWindow,
-    Polyline,
     useJsApiLoader,
 } from "@react-google-maps/api";
 
-const containerStyle = { width: "100%", height: "100%", borderRadius: "10px" };
-const defaultPosition = { lat: 28.6139, lng: 77.209 };
+const containerStyle = { width: "100%", height: "100%", borderRadius: "0" };
+const defaultPosition = { lat: 19.076, lng: 72.877 };
 
 const getToken = () => {
     const authItem = localStorage.getItem("auth");
@@ -23,579 +22,432 @@ const getToken = () => {
     }
 };
 
-const LiveTracking = () => {
-    const todayStr = new Date().toISOString().split("T")[0];
+// Convert lat/lng to pixel coords on the map container
+function latLngToPixel(map, lat, lng) {
+    const projection = map.getProjection();
+    if (!projection) return null;
+    const bounds = map.getBounds();
+    if (!bounds) return null;
+    const topRight = projection.fromLatLngToPoint(bounds.getNorthEast());
+    const bottomLeft = projection.fromLatLngToPoint(bounds.getSouthWest());
+    const scale = Math.pow(2, map.getZoom());
+    const point = projection.fromLatLngToPoint(
+        new window.google.maps.LatLng(lat, lng)
+    );
+    return {
+        x: (point.x - bottomLeft.x) * scale,
+        y: (point.y - topRight.y) * scale,
+    };
+}
 
+const getBatteryColor = (battery) => {
+    if (battery == null) return "#6b7280";
+    if (battery > 60) return "#16a34a";
+    if (battery > 20) return "#d97706";
+    return "#dc2626";
+};
+
+const getBatteryIcon = (battery) => {
+    if (battery == null) return "🔋";
+    if (battery > 60) return "🔋";
+    if (battery > 20) return "🪫";
+    return "⚠️";
+};
+
+const formatRelativeTime = (dateStr) => {
+    if (!dateStr) return "Unknown";
+    const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return new Date(dateStr).toLocaleDateString();
+};
+
+const LiveTracking = () => {
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedEmp, setSelectedEmp] = useState(null);
-    const [userRoute, setUserRoute] = useState(null);
-    const [stats, setStats] = useState({ count: 0, checkedIn: 0, checkedOut: 0 });
+    const [hoveredEmp, setHoveredEmp] = useState(null);
+    const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
     const [mapInstance, setMapInstance] = useState(null);
+    const mapContainerRef = useRef(null);
+    const hideTimeout = useRef(null);
 
     const { isLoaded } = useJsApiLoader({
         id: "google-map-script",
         googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
     });
 
-    // ─── Fetch Live Locations ───────────────────────────────────────────────────
-    // Uses /api/v1/attendance/live-locations — today's check-ins with live GPS position
+    // ─── Fetch latest location per employee from employeelocationlogs ──────────
     const fetchLiveLocations = useCallback(async () => {
         const token = getToken();
         if (!token) return;
-
         setLoading(true);
         setError(null);
         try {
-            const res = await axios.get("/api/v1/attendance/live-locations", {
+            const res = await axios.get("/api/v1/location/live", {
                 headers: { Authorization: `Bearer ${token}` },
             });
-
             if (res.data.success) {
-                // Filter out records with no location
                 const valid = (res.data.data || []).filter(
                     (e) => e.latitude && e.longitude
                 );
-
-                // Build employee objects compatible with map rendering
-                const mapped = valid.map((e) => ({
-                    id: String(e.userId),
-                    actualUserId: String(e.userId),
-                    name: e.name || "Unknown",
-                    email: e.email || "",
-                    mobileNumber: e.mobileNumber || "",
-                    latitude: Number(e.latitude),
-                    longitude: Number(e.longitude),
-                    lastLocationUpdated: e.lastLocationUpdated,
-                    battery: e.battery,
-                    isOnline: e.isOnline,
-                    // Attendance
-                    checkedOut: e.checkedOut,
-                    status: e.checkedOut ? "Checked Out" : "Checked In",
-                    checkInTime: e.checkInTime,
-                    checkInAddress: e.checkInAddress,
-                    checkInLocation: e.checkInLocation,
-                    checkOutTime: e.checkOutTime,
-                    checkOutAddress: e.checkOutAddress,
-                    workingHours: e.workingHours,
-                    geofenceValidated: e.geofenceValidated,
-                    // For timeline fetch
-                    date: todayStr,
-                }));
-
-                setEmployees(mapped);
-                setStats({
-                    count: res.data.count,
-                    checkedIn: res.data.checkedInCount,
-                    checkedOut: res.data.checkedOutCount,
-                });
+                setEmployees(
+                    valid.map((e) => ({
+                        id: String(e.userId),
+                        name: e.name || "Unknown",
+                        email: e.email || "",
+                        latitude: Number(e.latitude),
+                        longitude: Number(e.longitude),
+                        lastSeen: e.lastSeen,
+                        battery: e.battery,
+                        isOnline: e.isOnline,
+                        accuracy: e.accuracy,
+                    }))
+                );
             }
         } catch (err) {
-            console.error("[LiveTracking] Error fetching live locations:", err);
-            setError(
-                err.response?.data?.message ||
-                "Failed to load live locations. Please try again."
-            );
+            setError(err.response?.data?.message || "Failed to load live locations.");
         } finally {
             setLoading(false);
         }
-    }, [todayStr]);
+    }, []);
 
-    // Fetch data once on mount
     useEffect(() => {
         fetchLiveLocations();
+        const interval = setInterval(fetchLiveLocations, 60000);
+        return () => clearInterval(interval);
     }, [fetchLiveLocations]);
 
-    // ─── Fetch Timeline Path when employee is selected ─────────────────────────
+    // Auto-fit bounds
     useEffect(() => {
-        const fetchTimeline = async () => {
-            if (!selectedEmp) {
-                setUserRoute(null);
+        if (!mapInstance || !window.google || employees.length === 0) return;
+        const bounds = new window.google.maps.LatLngBounds();
+        employees.forEach((e) => bounds.extend({ lat: e.latitude, lng: e.longitude }));
+        mapInstance.fitBounds(bounds);
+        window.google.maps.event.addListenerOnce(mapInstance, "idle", () => {
+            if (mapInstance.getZoom() > 13) mapInstance.setZoom(13);
+        });
+    }, [mapInstance, employees]);
+
+    const onLoad = useCallback((map) => setMapInstance(map), []);
+    const onUnmount = useCallback(() => setMapInstance(null), []);
+
+    // ─── Hover logic: convert lat/lng to pixel, show custom div tooltip ──────
+    const showTooltip = useCallback(
+        (emp) => {
+            clearTimeout(hideTimeout.current);
+            if (!mapInstance || !window.google || !mapContainerRef.current) {
+                setHoveredEmp(emp);
                 return;
             }
-            try {
-                const token = getToken();
-                if (!token) return;
-
-                const res = await axios.get(
-                    `/api/v1/reports/timeline-report?userId=${selectedEmp.actualUserId}&date=${selectedEmp.date}`,
-                    { headers: { Authorization: `Bearer ${token}` } }
-                );
-
-                if (res.data.success && res.data.data?.route?.length > 0) {
-                    setUserRoute(res.data.data.route);
-                } else {
-                    setUserRoute([]);
-                }
-            } catch (err) {
-                console.error("[LiveTracking] Error fetching timeline:", err);
-                setUserRoute([]);
+            const px = latLngToPixel(mapInstance, emp.latitude, emp.longitude);
+            if (px) {
+                // Clamp so tooltip doesn't go off-screen
+                const containerW = mapContainerRef.current.offsetWidth;
+                const tooltipW = 210;
+                const x = Math.min(px.x + 16, containerW - tooltipW - 10);
+                setTooltipPos({ x, y: px.y - 90 });
             }
-        };
-        fetchTimeline();
-    }, [selectedEmp]);
+            setHoveredEmp(emp);
+        },
+        [mapInstance]
+    );
 
-    // ─── Map Auto-Fit Logic ────────────────────────────────────────────────────
+    const hideTooltip = useCallback(() => {
+        hideTimeout.current = setTimeout(() => setHoveredEmp(null), 150);
+    }, []);
+
+    const keepTooltip = useCallback(() => {
+        clearTimeout(hideTimeout.current);
+    }, []);
+
+    // Recalculate pixel position if map pans/zooms while tooltip is open
     useEffect(() => {
-        if (!mapInstance || !window.google) return;
+        if (!mapInstance || !hoveredEmp) return;
+        const listener = mapInstance.addListener("bounds_changed", () => {
+            const px = latLngToPixel(mapInstance, hoveredEmp.latitude, hoveredEmp.longitude);
+            if (px) {
+                const containerW = mapContainerRef.current?.offsetWidth || 800;
+                const tooltipW = 210;
+                const x = Math.min(px.x + 16, containerW - tooltipW - 10);
+                setTooltipPos({ x, y: px.y - 90 });
+            }
+        });
+        return () => window.google.maps.event.removeListener(listener);
+    }, [mapInstance, hoveredEmp]);
 
-        if (selectedEmp) {
-            // Re-center on selected employee
-            mapInstance.panTo({ lat: selectedEmp.latitude, lng: selectedEmp.longitude });
-            mapInstance.setZoom(15);
-        } else if (employees.length > 0) {
-            // Fit bounds to show all employees
-            const bounds = new window.google.maps.LatLngBounds();
-            employees.forEach((emp) => {
-                if (emp.latitude && emp.longitude) {
-                    bounds.extend({ lat: emp.latitude, lng: emp.longitude });
-                }
-            });
-            mapInstance.fitBounds(bounds);
-            
-            // Prevent map from zooming in too far when markers are very close
-            window.google.maps.event.addListenerOnce(mapInstance, "idle", () => {
-                if (mapInstance.getZoom() > 14) {
-                    mapInstance.setZoom(14);
-                }
-            });
-        }
-    }, [mapInstance, employees, selectedEmp]);
-
-    // ─── Handlers ──────────────────────────────────────────────────────────────
-    const handleEmployeeClick = (emp) => {
+    const handleMarkerClick = (emp) => {
+        clearTimeout(hideTimeout.current);
+        setHoveredEmp(null);
         setSelectedEmp((prev) => (prev?.id === emp.id ? null : emp));
     };
 
-    const onLoad = useCallback(function callback(map) {
-        setMapInstance(map);
-    }, []);
-
-    const onUnmount = useCallback(function callback(map) {
-        setMapInstance(null);
-    }, []);
-
-    const mapCenter = defaultPosition; // Managed by fitBounds/panTo dynamically
-
-    // ─── Icons ─────────────────────────────────────────────────────────────────
-    const onlineIcon = "http://maps.google.com/mapfiles/ms/icons/green-dot.png";
-    const offlineIcon = "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
-    const checkedOutIcon = "http://maps.google.com/mapfiles/ms/icons/yellow-dot.png";
-    const liveIcon = "http://maps.google.com/mapfiles/ms/icons/blue-dot.png";
-
-    const pathOptions = {
-        strokeColor: "#3b82f6",
-        strokeOpacity: 0.85,
-        strokeWeight: 4,
+    const markerIcon = (emp) => {
+        if (!window.google) return undefined;
+        return {
+            path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+            fillColor: emp.isOnline ? "#111827" : "#9ca3af",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 2,
+            scale: 5,
+        };
     };
 
-    // ─── Helpers ───────────────────────────────────────────────────────────────
-    const formatTime = (dateStr) => {
-        if (!dateStr) return "N/A";
-        return new Date(dateStr).toLocaleTimeString("en-IN", {
-            hour: "2-digit",
-            minute: "2-digit",
-        });
-    };
+    const onlineCount = employees.filter((e) => e.isOnline).length;
 
-    const formatWorkingHours = (hrs) => {
-        if (hrs == null) return "N/A";
-        const h = Math.floor(hrs);
-        const m = Math.round((hrs - h) * 60);
-        return `${h}h ${m}m`;
-    };
-
-    const getMarkerIcon = (emp) => {
-        if (emp.checkedOut) return checkedOutIcon;
-        if (emp.isOnline) return onlineIcon;
-        return offlineIcon;
-    };
-
-    // ─── Render ────────────────────────────────────────────────────────────────
     return (
-        <div
-            style={{
-                height: "calc(100vh - 100px)",
-                padding: "1rem",
+        <div style={{
+            height: "calc(100vh - 70px)",
+            display: "flex",
+            flexDirection: "column",
+            fontFamily: "Inter, sans-serif",
+            background: "#f9fafb",
+        }}>
+            {/* ── Header ── */}
+            <div style={{
                 display: "flex",
-                flexDirection: "column",
-                gap: "0.75rem",
-            }}
-        >
-            {/* Header */}
-            <div
-                style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: "10px",
-                }}
-            >
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "10px 20px",
+                background: "white",
+                borderBottom: "1px solid #e5e7eb",
+                flexWrap: "wrap",
+                gap: 8,
+            }}>
                 <div>
-                    <h2 style={{ margin: 0, fontSize: "1.4rem", fontWeight: "bold" }}>
+                    <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: "#111827" }}>
                         🗺️ Live Tracking
                     </h2>
-                    <p style={{ margin: 0, fontSize: "0.8rem", color: "#666" }}>
-                        Today's field staff
+                    <p style={{ margin: 0, fontSize: "0.72rem", color: "#9ca3af" }}>
+                        Latest GPS position · auto-refreshes every 60s
                     </p>
                 </div>
-
-                {/* Stats badges */}
-                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                    <span
-                        style={{
-                            background: "#dcfce7",
-                            color: "#166534",
-                            borderRadius: "999px",
-                            padding: "4px 12px",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                        }}
-                    >
-                        ● {stats.checkedIn} Checked In
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <span style={{ background: "#dcfce7", color: "#166534", borderRadius: 999, padding: "3px 12px", fontSize: "0.8rem", fontWeight: 600 }}>
+                        🟢 {onlineCount} Online
                     </span>
-                    <span
-                        style={{
-                            background: "#fef9c3",
-                            color: "#713f12",
-                            borderRadius: "999px",
-                            padding: "4px 12px",
-                            fontSize: "0.8rem",
-                            fontWeight: "600",
-                        }}
-                    >
-                        ● {stats.checkedOut} Checked Out
+                    <span style={{ background: "#f3f4f6", color: "#374151", borderRadius: 999, padding: "3px 12px", fontSize: "0.8rem", fontWeight: 600 }}>
+                        ⚫ {employees.length - onlineCount} Offline
                     </span>
                     <button
                         onClick={fetchLiveLocations}
                         disabled={loading}
                         style={{
                             padding: "6px 16px",
-                            background: "#3b82f6",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: "6px",
+                            background: loading ? "#93c5fd" : "#2563eb",
+                            color: "#fff", border: "none", borderRadius: 6,
                             cursor: loading ? "not-allowed" : "pointer",
-                            opacity: loading ? 0.7 : 1,
-                            fontSize: "0.85rem",
+                            fontSize: "0.82rem", fontWeight: 600,
                         }}
                     >
-                        {loading ? "Refreshing…" : "🔄 Refresh"}
+                        {loading ? "Loading…" : "🔄 Refresh"}
                     </button>
                 </div>
             </div>
 
-            {/* Error Banner */}
             {error && (
-                <div
-                    style={{
-                        background: "#fee2e2",
-                        border: "1px solid #f87171",
-                        borderRadius: "6px",
-                        padding: "10px 16px",
-                        color: "#b91c1c",
-                        fontSize: "0.85rem",
-                    }}
-                >
+                <div style={{ background: "#fee2e2", padding: "8px 20px", color: "#b91c1c", fontSize: "0.83rem" }}>
                     ⚠️ {error}
                 </div>
             )}
 
-            {/* Map */}
-            <div
-                style={{
-                    flexGrow: 1,
-                    width: "100%",
-                    borderRadius: "10px",
-                    overflow: "hidden",
-                    border: "1px solid #ddd",
-                    minHeight: "350px",
-                }}
-            >
-                {isLoaded ? (
-                    <GoogleMap
-                        mapContainerStyle={containerStyle}
-                        center={mapCenter}
-                        zoom={12}
-                        onLoad={onLoad}
-                        onUnmount={onUnmount}
-                    >
-                        {/* All staff markers (when no one selected) */}
-                        {!selectedEmp &&
-                            employees.map((emp) => (
+            {/* ── Main area ── */}
+            <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+
+                {/* ── Map ── */}
+                <div ref={mapContainerRef} style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+                    {isLoaded ? (
+                        <GoogleMap
+                            mapContainerStyle={containerStyle}
+                            center={defaultPosition}
+                            zoom={11}
+                            onLoad={onLoad}
+                            onUnmount={onUnmount}
+                            options={{
+                                streetViewControl: false,
+                                fullscreenControl: true,
+                                clickableIcons: false,
+                            }}
+                        >
+                            {/* ── Live location markers only — no polylines, no route ── */}
+                            {employees.map((emp) => (
                                 <Marker
                                     key={emp.id}
                                     position={{ lat: emp.latitude, lng: emp.longitude }}
-                                    icon={getMarkerIcon(emp)}
-                                    title={`${emp.name} — ${emp.status}`}
-                                    onClick={() => handleEmployeeClick(emp)}
+                                    icon={markerIcon(emp)}
+                                    zIndex={emp.isOnline ? 10 : 1}
+                                    onMouseOver={() => showTooltip(emp)}
+                                    onMouseOut={hideTooltip}
+                                    onClick={() => handleMarkerClick(emp)}
                                 />
                             ))}
 
-                        {/* Selected employee: route + markers */}
-                        {selectedEmp && (
-                            <>
-                                {/* Route polyline */}
-                                {userRoute && userRoute.length > 0 && (
-                                    <Polyline
-                                        path={userRoute.map((p) => ({
-                                            lat: Number(p.lat),
-                                            lng: Number(p.lng),
-                                        }))}
-                                        options={pathOptions}
-                                    />
-                                )}
-
-                                {/* Check-IN marker */}
-                                {selectedEmp.checkInLocation?.lat && (
-                                    <Marker
-                                        position={{
-                                            lat: Number(selectedEmp.checkInLocation.lat),
-                                            lng: Number(selectedEmp.checkInLocation.lng),
-                                        }}
-                                        label="IN"
-                                        title={`Check-In: ${formatTime(selectedEmp.checkInTime)}`}
-                                        icon={onlineIcon}
-                                    />
-                                )}
-
-                                {/* Check-OUT marker */}
-                                {selectedEmp.checkOutAddress && selectedEmp.latitude && (
-                                    <Marker
-                                        position={{
-                                            lat: Number(selectedEmp.latitude),
-                                            lng: Number(selectedEmp.longitude),
-                                        }}
-                                        label="OUT"
-                                        title={`Check-Out: ${formatTime(selectedEmp.checkOutTime)}`}
-                                        icon={checkedOutIcon}
-                                    />
-                                )}
-
-                                {/* Current live position marker + InfoWindow */}
-                                <Marker
-                                    position={{
-                                        lat: selectedEmp.latitude,
-                                        lng: selectedEmp.longitude,
-                                    }}
-                                    icon={selectedEmp.isOnline ? liveIcon : offlineIcon}
-                                    title="Current Position"
-                                    onClick={() => setSelectedEmp(null)}
+                            {/* ── Click InfoWindow (full detail) ── */}
+                            {selectedEmp && (
+                                <InfoWindow
+                                    position={{ lat: selectedEmp.latitude, lng: selectedEmp.longitude }}
+                                    onCloseClick={() => setSelectedEmp(null)}
+                                    options={{ pixelOffset: new window.google.maps.Size(0, -38) }}
                                 >
-                                    <InfoWindow
-                                        position={{
-                                            lat: selectedEmp.latitude,
-                                            lng: selectedEmp.longitude,
-                                        }}
-                                        onCloseClick={() => setSelectedEmp(null)}
-                                    >
-                                        <div style={{ minWidth: "220px", fontFamily: "sans-serif" }}>
-                                            <h3
-                                                style={{
-                                                    margin: "0 0 8px 0",
-                                                    fontSize: "1rem",
-                                                    fontWeight: "bold",
-                                                }}
-                                            >
-                                                {selectedEmp.name}
-                                            </h3>
-                                            <table
-                                                style={{
-                                                    width: "100%",
-                                                    fontSize: "0.82rem",
-                                                    borderCollapse: "collapse",
-                                                }}
-                                            >
-                                                <tbody>
-                                                    <tr>
-                                                        <td style={{ color: "#555", paddingBottom: "4px" }}>
-                                                            <strong>Status</strong>
-                                                        </td>
-                                                        <td
-                                                            style={{
-                                                                color: selectedEmp.checkedOut
-                                                                    ? "#d97706"
-                                                                    : selectedEmp.isOnline
-                                                                    ? "#16a34a"
-                                                                    : "#dc2626",
-                                                                fontWeight: "bold",
-                                                                paddingBottom: "4px",
-                                                            }}
-                                                        >
-                                                            {selectedEmp.status}
-                                                        </td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td style={{ color: "#555", paddingBottom: "4px" }}>
-                                                            <strong>Battery</strong>
-                                                        </td>
-                                                        <td style={{ paddingBottom: "4px" }}>
-                                                            {selectedEmp.battery != null
-                                                                ? `${selectedEmp.battery}%`
-                                                                : "N/A"}
-                                                        </td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td style={{ color: "#555", paddingBottom: "4px" }}>
-                                                            <strong>Check In</strong>
-                                                        </td>
-                                                        <td style={{ paddingBottom: "4px" }}>
-                                                            {formatTime(selectedEmp.checkInTime)}
-                                                        </td>
-                                                    </tr>
-                                                    {selectedEmp.checkedOut && (
-                                                        <>
-                                                            <tr>
-                                                                <td style={{ color: "#555", paddingBottom: "4px" }}>
-                                                                    <strong>Check Out</strong>
-                                                                </td>
-                                                                <td style={{ paddingBottom: "4px" }}>
-                                                                    {formatTime(selectedEmp.checkOutTime)}
-                                                                </td>
-                                                            </tr>
-                                                            <tr>
-                                                                <td style={{ color: "#555", paddingBottom: "4px" }}>
-                                                                    <strong>Working Hrs</strong>
-                                                                </td>
-                                                                <td style={{ paddingBottom: "4px" }}>
-                                                                    {formatWorkingHours(selectedEmp.workingHours)}
-                                                                </td>
-                                                            </tr>
-                                                        </>
-                                                    )}
-                                                    {selectedEmp.checkInAddress && (
-                                                        <tr>
-                                                            <td style={{ color: "#555", paddingBottom: "4px" }}>
-                                                                <strong>Location</strong>
-                                                            </td>
-                                                            <td
-                                                                style={{
-                                                                    paddingBottom: "4px",
-                                                                    maxWidth: "150px",
-                                                                    wordBreak: "break-word",
-                                                                    fontSize: "0.76rem",
-                                                                }}
-                                                            >
-                                                                {selectedEmp.checkInAddress}
-                                                            </td>
-                                                        </tr>
-                                                    )}
-                                                    <tr>
-                                                        <td style={{ color: "#555", paddingBottom: "4px" }}>
-                                                            <strong>Geofence</strong>
-                                                        </td>
-                                                        <td style={{ paddingBottom: "4px" }}>
-                                                            {selectedEmp.geofenceValidated ? "✅ Inside" : "❌ Outside"}
-                                                        </td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                            <button
-                                                onClick={() => setSelectedEmp(null)}
-                                                style={{
-                                                    marginTop: "10px",
-                                                    width: "100%",
-                                                    background: "#e2e8f0",
-                                                    border: "none",
-                                                    padding: "6px",
-                                                    borderRadius: "4px",
-                                                    cursor: "pointer",
-                                                    fontSize: "0.8rem",
-                                                }}
-                                            >
-                                                Close
-                                            </button>
+                                    <div style={{ padding: "10px 12px", minWidth: 200, fontFamily: "Inter, sans-serif" }}>
+                                        <p style={{ margin: "0 0 8px", fontWeight: 700, fontSize: 14, textTransform: "uppercase", color: "#111827" }}>
+                                            {selectedEmp.name}
+                                        </p>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 13 }}>
+                                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                                <span style={{ color: "#6b7280" }}>Status</span>
+                                                <span style={{ fontWeight: 600, color: selectedEmp.isOnline ? "#16a34a" : "#6b7280" }}>
+                                                    {selectedEmp.isOnline ? "🟢 Online" : "⚫ Offline"}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                                <span style={{ color: "#6b7280" }}>Battery</span>
+                                                <span style={{ fontWeight: 600, color: getBatteryColor(selectedEmp.battery) }}>
+                                                    {getBatteryIcon(selectedEmp.battery)} {selectedEmp.battery != null ? `${selectedEmp.battery}%` : "N/A"}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                                <span style={{ color: "#6b7280" }}>Last seen</span>
+                                                <span style={{ fontWeight: 600 }}>{formatRelativeTime(selectedEmp.lastSeen)}</span>
+                                            </div>
                                         </div>
-                                    </InfoWindow>
-                                </Marker>
-                            </>
-                        )}
-                    </GoogleMap>
-                ) : (
-                    <div
-                        style={{
-                            display: "flex",
-                            justifyContent: "center",
-                            alignItems: "center",
-                            height: "100%",
-                            color: "#666",
-                        }}
-                    >
-                        Loading Maps…
+                                        <div style={{ borderTop: "1px solid #f3f4f6", paddingTop: 8, marginTop: 8 }}>
+                                            <a
+                                                href={`/dashboard/users/${selectedEmp.id}/profile`}
+                                                style={{ color: "#2563eb", fontSize: 13, fontWeight: 600, textDecoration: "none" }}
+                                            >
+                                                View Profile →
+                                            </a>
+                                        </div>
+                                    </div>
+                                </InfoWindow>
+                            )}
+                        </GoogleMap>
+                    ) : (
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#666" }}>
+                            Loading Maps…
+                        </div>
+                    )}
+
+                    {/*
+                        ── CUSTOM HOVER TOOLTIP ──────────────────────────────────────────
+                        Rendered as a plain React div ON TOP of the map container.
+                        This avoids the InfoWindow flicker bug entirely.
+                    */}
+                    {hoveredEmp && (
+                        <div
+                            onMouseEnter={keepTooltip}
+                            onMouseLeave={hideTooltip}
+                            style={{
+                                position: "absolute",
+                                left: tooltipPos.x,
+                                top: tooltipPos.y,
+                                zIndex: 9999,
+                                background: "white",
+                                borderRadius: 8,
+                                boxShadow: "0 4px 20px rgba(0,0,0,0.18)",
+                                padding: "12px 14px",
+                                minWidth: 200,
+                                pointerEvents: "auto",
+                                fontFamily: "Inter, sans-serif",
+                                border: "1px solid #e5e7eb",
+                            }}
+                        >
+                            {/* Name */}
+                            <div style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: 8,
+                            }}>
+                                <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "#111827", textTransform: "uppercase" }}>
+                                    {hoveredEmp.name}
+                                </p>
+                                <button
+                                    onClick={() => setHoveredEmp(null)}
+                                    style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 16, lineHeight: 1, padding: 0 }}
+                                >
+                                    ×
+                                </button>
+                            </div>
+
+                            {/* Battery row */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+                                <span style={{ fontSize: 18 }}>{getBatteryIcon(hoveredEmp.battery)}</span>
+                                <span style={{ fontWeight: 700, fontSize: 15, color: getBatteryColor(hoveredEmp.battery) }}>
+                                    {hoveredEmp.battery != null ? `${hoveredEmp.battery}%` : "N/A"}
+                                </span>
+                                <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 4 }}>
+                                    {formatRelativeTime(hoveredEmp.lastSeen)}
+                                </span>
+                            </div>
+
+                            {/* View Profile */}
+                            <div style={{ borderTop: "1px solid #f3f4f6", paddingTop: 10 }}>
+                                <a
+                                    href={`/dashboard/users/${hoveredEmp.id}/profile`}
+                                    style={{ color: "#2563eb", fontSize: 13, fontWeight: 600, textDecoration: "none" }}
+                                >
+                                    View Profile
+                                </a>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Right sidebar ── */}
+                <div style={{
+                    width: 260,
+                    background: "white",
+                    borderLeft: "1px solid #e5e7eb",
+                    overflowY: "auto",
+                    flexShrink: 0,
+                }}>
+                    <div style={{ padding: "12px 14px", borderBottom: "1px solid #f3f4f6" }}>
+                        <h3 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#6b7280", letterSpacing: "0.5px" }}>
+                            FIELD STAFF ({employees.length})
+                        </h3>
                     </div>
-                )}
-            </div>
 
-            {/* Legend */}
-            <div
-                style={{
-                    display: "flex",
-                    gap: "16px",
-                    fontSize: "0.75rem",
-                    color: "#555",
-                    flexWrap: "wrap",
-                }}
-            >
-                <span>🟢 Online & Checked In</span>
-                <span>🟡 Checked Out</span>
-                <span>🔴 Offline (no ping &gt; 30 min)</span>
-                <span>🔵 Selected / Live Position</span>
-            </div>
+                    {!loading && employees.length === 0 && (
+                        <div style={{ padding: 20, textAlign: "center", color: "#9ca3af", fontSize: 13 }}>
+                            No location data yet.
+                        </div>
+                    )}
 
-            {/* Staff cards panel */}
-            <div style={{ overflowY: "auto", maxHeight: "200px" }}>
-                <h3 style={{ margin: "0 0 10px 0", fontSize: "0.95rem", fontWeight: "bold" }}>
-                    Field Staff Today ({employees.length}) — Click to view path
-                </h3>
-
-                {employees.length === 0 && !loading && (
-                    <div style={{ color: "#888", fontSize: "0.85rem" }}>
-                        No staff have checked in today yet.
-                    </div>
-                )}
-
-                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
                     {employees.map((emp) => (
                         <div
                             key={emp.id}
-                            onClick={() => handleEmployeeClick(emp)}
+                            onClick={() => handleMarkerClick(emp)}
+                            onMouseEnter={() => {
+                                if (mapInstance) {
+                                    mapInstance.panTo({ lat: emp.latitude, lng: emp.longitude });
+                                }
+                                showTooltip(emp);
+                            }}
+                            onMouseLeave={hideTooltip}
                             style={{
-                                padding: "0.7rem 1rem",
-                                border:
-                                    selectedEmp?.id === emp.id
-                                        ? "2px solid #3b82f6"
-                                        : "1px solid #e5e7eb",
-                                borderRadius: "8px",
-                                background: emp.checkedOut
-                                    ? "#fffbeb"
-                                    : emp.isOnline
-                                    ? "#f0fdf4"
-                                    : "#fef2f2",
-                                width: "190px",
+                                padding: "10px 14px",
+                                borderBottom: "1px solid #f9fafb",
                                 cursor: "pointer",
-                                transition: "all 0.15s",
-                                boxShadow:
-                                    selectedEmp?.id === emp.id
-                                        ? "0 4px 10px rgba(59,130,246,0.25)"
-                                        : "0 1px 3px rgba(0,0,0,0.07)",
+                                background: selectedEmp?.id === emp.id ? "#eff6ff" : "white",
+                                borderLeft: selectedEmp?.id === emp.id ? "3px solid #2563eb" : "3px solid transparent",
                             }}
                         >
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span>
-                                    {emp.checkedOut ? "🟡" : emp.isOnline ? "🟢" : "🔴"}
-                                </span>
-                                <strong style={{ fontSize: "0.88rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <span style={{ fontSize: 9 }}>{emp.isOnline ? "🟢" : "⚫"}</span>
+                                <span style={{ fontWeight: 600, fontSize: 13, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                     {emp.name}
-                                </strong>
+                                </span>
                             </div>
-                            <div style={{ fontSize: "0.75rem", color: "#666", marginTop: "4px" }}>
-                                {emp.status}
-                            </div>
-                            <div style={{ fontSize: "0.72rem", color: "#999", marginTop: "2px" }}>
-                                In: {formatTime(emp.checkInTime)}
-                                {emp.battery != null ? ` · 🔋${emp.battery}%` : ""}
+                            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                                <span style={{ fontSize: 12, color: getBatteryColor(emp.battery), fontWeight: 600 }}>
+                                    {getBatteryIcon(emp.battery)} {emp.battery != null ? `${emp.battery}%` : "N/A"}
+                                </span>
+                                <span style={{ fontSize: 11, color: "#9ca3af" }}>{formatRelativeTime(emp.lastSeen)}</span>
                             </div>
                         </div>
                     ))}

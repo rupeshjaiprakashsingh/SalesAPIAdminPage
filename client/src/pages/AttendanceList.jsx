@@ -6,6 +6,17 @@ import "../styles/AttendanceList.css";
 
 export default function AttendanceList() {
   const [records, setRecords] = useState([]);
+  const [showPresentModal, setShowPresentModal] = useState(false);
+  const [presentEditData, setPresentEditData] = useState({
+    userId: "",
+    userName: "",
+    date: "",
+    inTime: "",
+    outTime: "",
+    status: "Present",
+    remarks: ""
+  });
+
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
 
@@ -298,6 +309,21 @@ export default function AttendanceList() {
         date: newAttendance.date || undefined,   // blank → backend uses today
         remarks: newAttendance.remarks || undefined
       };
+
+      await axios.post(
+        `/api/v1/attendance/admin-add`,
+        payload,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success("Attendance added successfully");
+      setShowAddModal(false);
+      setNewAttendance({ userId: "", status: "Present", date: "", remarks: "" });
+      fetchRecords(page, limit);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Error adding attendance");
+    }
+  };
+
   const handleQuickMark = async (userId, status, date) => {
     if (userRole !== 'admin') return;
     try {
@@ -317,22 +343,67 @@ export default function AttendanceList() {
     }
   };
 
-      await axios.post(
-        `/api/v1/attendance/admin-add`,
-        payload,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Attendance added successfully");
-      setShowAddModal(false);
-      setNewAttendance({ userId: "", status: "Present", date: "", remarks: "" });
+  const handleStatusClick = (record, status) => {
+    if (userRole !== 'admin') return;
+    
+    if (status === 'Present') {
+      const formatTime = (iso) => {
+        if (!iso) return "";
+        const d = new Date(iso);
+        return d.getHours().toString().padStart(2, '0') + ":" + d.getMinutes().toString().padStart(2, '0');
+      };
+
+      const inTime = record.inRecord ? formatTime(record.inRecord.deviceTime) : "";
+      const outTime = record.outRecord ? formatTime(record.outRecord.deviceTime) : "";
+      
+      setPresentEditData({
+        userId: record.userId,
+        userName: record.userDetails?.name || "User",
+        date: record.dateStr,
+        inTime: inTime,
+        outTime: outTime,
+        status: record.outRecord?.status || record.inRecord?.status || "Present",
+        remarks: record.outRecord?.remarks || record.inRecord?.remarks || ""
+      });
+      setShowPresentModal(true);
+    } else {
+      handleQuickMark(record.userId, status, record.dateStr);
+    }
+  };
+
+  const handlePresentSave = async (e) => {
+    e.preventDefault();
+    try {
+      // Recombine date and time for backend
+      const combineDateTime = (dateStr, timeStr) => {
+        if (!timeStr) return undefined;
+        return `${dateStr}T${timeStr}:00`;
+      };
+
+      const payload = {
+        userId: presentEditData.userId,
+        status: presentEditData.status,
+        date: presentEditData.date,
+        remarks: presentEditData.remarks,
+        inTime: combineDateTime(presentEditData.date, presentEditData.inTime),
+        outTime: combineDateTime(presentEditData.date, presentEditData.outTime)
+      };
+      
+      await axios.post(`/api/v1/attendance/admin-add`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      toast.success(`Attendance updated for ${presentEditData.userName}`);
+      setShowPresentModal(false);
       fetchRecords(page, limit);
     } catch (err) {
-      toast.error(err.response?.data?.message || "Error adding attendance");
+      toast.error(err.response?.data?.message || "Error updating attendance");
     }
   };
 
 
   const statTotalStaff = users.length;
+
   const statPresentCount = filtered.filter(f => { const s = f.outRecord?.status || f.inRecord?.status; return s === "Present" || s === "Full Day"; }).length;
   const statAbsentCount = filtered.filter(f => { const s = f.outRecord?.status || f.inRecord?.status; return s === "Absent"; }).length;
   const statHalfDayCount = filtered.filter(f => { const s = f.outRecord?.status || f.inRecord?.status; return s === "Half Day"; }).length;
@@ -497,7 +568,7 @@ export default function AttendanceList() {
                   {/* Right Section (Status Grid) */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '400px' }}>
                      <div 
-                        onClick={() => handleQuickMark(r.userId, 'Present', r.dateStr)}
+                        onClick={() => handleStatusClick(r, 'Present')}
                         style={{ 
                            background: isPresent ? '#dcfce7' : '#f9fafb', 
                            border: isPresent ? '1px solid #16a34a' : '1px solid #e5e7eb', 
@@ -771,6 +842,111 @@ export default function AttendanceList() {
           </div>
         </div>
       )}
+
+      {/* Present / Edit Times Modal */}
+      {showPresentModal && (
+        <div className="modal-overlay" onClick={() => setShowPresentModal(false)} style={{ backdropFilter: 'blur(4px)' }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ 
+            maxWidth: '480px', 
+            borderRadius: '12px', 
+            padding: '24px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            <form onSubmit={handlePresentSave}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#111827', textTransform: 'uppercase' }}>
+                  {presentEditData.userName} <span style={{ color: '#9ca3af', fontWeight: 400, marginLeft: '8px' }}>| {new Date(presentEditData.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                </h3>
+                <button type="button" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: '#4b5563', cursor: 'pointer' }}>Add Shift</button>
+              </div>
+
+              <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '16px', border: '1px solid #f3f4f6', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px', fontSize: '14px', fontWeight: 700, color: '#111827' }}>
+                   Regular <i className="ri-information-line" style={{ color: '#9ca3af', fontWeight: 400 }}></i>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  <div className="form-group">
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '6px' }}>Start Time</label>
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type="time" 
+                        value={presentEditData.inTime} 
+                        onChange={(e) => setPresentEditData({...presentEditData, inTime: e.target.value})} 
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '15px' }}
+                      />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '6px' }}>End Time</label>
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type="time" 
+                        value={presentEditData.outTime} 
+                        onChange={(e) => setPresentEditData({...presentEditData, outTime: e.target.value})} 
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '15px' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                {!presentEditData.outTime && (
+                  <div style={{ marginTop: '12px', fontSize: '12px', color: '#d97706', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <i className="ri-information-line"></i> Out time is mandatory to mark present
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '6px' }}>Status</label>
+                  <select 
+                    value={presentEditData.status}
+                    onChange={(e) => setPresentEditData({...presentEditData, status: e.target.value})}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white' }}
+                  >
+                    <option value="Present">Present</option>
+                    <option value="Half Day">Half Day</option>
+                    <option value="Absent">Absent</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '6px' }}>Remarks</label>
+                   <input 
+                    type="text" 
+                    value={presentEditData.remarks} 
+                    onChange={(e) => setPresentEditData({...presentEditData, remarks: e.target.value})} 
+                    placeholder="Optional"
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowPresentModal(false)}
+                  style={{ padding: '12px', borderRadius: '8px', border: '1px solid #2563eb', background: 'white', color: '#2563eb', cursor: 'pointer', fontWeight: 600, fontSize: '14px' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={!presentEditData.outTime && presentEditData.status === 'Present'}
+                  style={{ 
+                    padding: '12px', borderRadius: '8px', border: 'none', 
+                    background: (!presentEditData.outTime && presentEditData.status === 'Present') ? '#9ca3af' : '#2563eb', 
+                    color: 'white', cursor: (!presentEditData.outTime && presentEditData.status === 'Present') ? 'not-allowed' : 'pointer', 
+                    fontWeight: 600, fontSize: '14px' 
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div >
+
   );
 }
