@@ -428,57 +428,9 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                             />
                                         );
 
-                                        // ── DRIVE selected: show ONLY that segment ──────────────
-                                        if (activeTimelineEvent?.type === 'Drive') {
-                                            const highlightedSegments = routeSegments
-                                                .map(seg => seg.filter(p => {
-                                                    if (!p.time || !activeTimelineEvent.time || !activeTimelineEvent.endTime) return false;
-                                                    const t = new Date(p.time);
-                                                    return t >= new Date(activeTimelineEvent.time) && t <= new Date(activeTimelineEvent.endTime);
-                                                }))
-                                                .filter(s => s.length >= 2); // need ≥2 pts for a valid Polyline
-                                            if (!highlightedSegments.length) return null;
-                                            const firstPt = highlightedSegments[0][0];
-                                            const lastSeg = highlightedSegments[highlightedSegments.length - 1];
-                                            const lastPt = lastSeg[lastSeg.length - 1];
-                                            return (
-                                                <>
-                                                    {highlightedSegments.map((hSeg, idx) => (
-                                                        <Polyline key={`drive-only-${activeTimelineEvent.id}-${idx}`} path={hSeg}
-                                                            options={{ strokeColor: '#16a34a', strokeOpacity: 1, strokeWeight: 5, zIndex: 5 }} />
-                                                    ))}
-                                                    {window.google && <Marker key={`drive-s-${activeTimelineEvent.id}`}
-                                                        position={{ lat: firstPt.lat, lng: firstPt.lng }}
-                                                        icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#16a34a', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
-                                                        label={{ text: 'S', color: 'white', fontSize: '8px', fontWeight: 'bold' }} zIndex={10} />}
-                                                    {window.google && <Marker key={`drive-e-${activeTimelineEvent.id}`}
-                                                        position={{ lat: lastPt.lat, lng: lastPt.lng }}
-                                                        icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: '#111827', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
-                                                        zIndex={9} />}
-                                                    {playbackArrow}
-                                                </>
-                                            );
-                                        }
-
-                                        // ── STOP selected: show ONLY that stop ─────────────────
-                                        if (activeTimelineEvent?.type === 'Stop' && activeTimelineEvent.lat) {
-                                            return (
-                                                <>
-                                                    {window.google && <Marker key={`stop-marker-${activeTimelineEvent.id}`}
-                                                        position={{ lat: Number(activeTimelineEvent.lat), lng: Number(activeTimelineEvent.lng) }}
-                                                        icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#000000', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
-                                                        zIndex={10} />}
-                                                    <Circle key={`stop-circle-${activeTimelineEvent.id}`}
-                                                        center={{ lat: Number(activeTimelineEvent.lat), lng: Number(activeTimelineEvent.lng) }}
-                                                        radius={300}
-                                                        options={{ fillColor: '#10b981', fillOpacity: 0.25, strokeColor: '#10b981', strokeWeight: 1, zIndex: 2 }} />
-                                                </>
-                                            );
-                                        }
-
-                                        // ── No / Start / Outage event: show full route ─────────
                                         return (
                                             <>
+                                                {/* 1. Unconditionally render the BASE full route (black line) */}
                                                 {routeSegments.filter(s => s.length >= 2).map((seg, idx) => (
                                                     <Polyline key={`base-seg-${idx}`} path={seg}
                                                         options={{ strokeColor: '#111827', strokeOpacity: 0.9, strokeWeight: 3, zIndex: 1 }} />
@@ -491,6 +443,53 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                                     position={{ lat: fullRoutePath[fullRoutePath.length - 1].lat, lng: fullRoutePath[fullRoutePath.length - 1].lng }}
                                                     icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: '#111827', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
                                                     zIndex={3} />}
+
+                                                {/* 2. Conditionally overlay DRIVE segment if selected */}
+                                                {activeTimelineEvent?.type === 'Drive' && (() => {
+                                                    const highlightedSegments = routeSegments
+                                                        .map(seg => seg.filter(p => {
+                                                            if (!p.time || !activeTimelineEvent.time || !activeTimelineEvent.endTime) return false;
+                                                            const t = new Date(p.time);
+                                                            return t >= new Date(activeTimelineEvent.time) && t <= new Date(activeTimelineEvent.endTime);
+                                                        }))
+                                                        .filter(s => s.length >= 2);
+                                                    if (!highlightedSegments.length) return null;
+                                                    const firstPt = highlightedSegments[0][0];
+                                                    const lastSeg = highlightedSegments[highlightedSegments.length - 1];
+                                                    const lastPt = lastSeg[lastSeg.length - 1];
+                                                    return (
+                                                        <>
+                                                            {highlightedSegments.map((hSeg, idx) => (
+                                                                <Polyline key={`drive-only-${activeTimelineEvent.id}-${idx}`} path={hSeg}
+                                                                    options={{ strokeColor: '#16a34a', strokeOpacity: 1, strokeWeight: 5, zIndex: 5 }} />
+                                                            ))}
+                                                            {window.google && <Marker key={`drive-s-${activeTimelineEvent.id}`}
+                                                                position={{ lat: firstPt.lat, lng: firstPt.lng }}
+                                                                icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#16a34a', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
+                                                                label={{ text: 'S', color: 'white', fontSize: '8px', fontWeight: 'bold' }} zIndex={10} />}
+                                                            {window.google && <Marker key={`drive-e-${activeTimelineEvent.id}`}
+                                                                position={{ lat: lastPt.lat, lng: lastPt.lng }}
+                                                                icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: '#16a34a', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
+                                                                zIndex={9} />}
+                                                        </>
+                                                    );
+                                                })()}
+
+                                                {/* 3. Conditionally overlay STOP circle if selected */}
+                                                {activeTimelineEvent?.type === 'Stop' && activeTimelineEvent.lat && (
+                                                    <>
+                                                        {window.google && <Marker key={`stop-marker-${activeTimelineEvent.id}`}
+                                                            position={{ lat: Number(activeTimelineEvent.lat), lng: Number(activeTimelineEvent.lng) }}
+                                                            icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#000000', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
+                                                            zIndex={10} />}
+                                                        <Circle key={`stop-circle-${activeTimelineEvent.id}`}
+                                                            center={{ lat: Number(activeTimelineEvent.lat), lng: Number(activeTimelineEvent.lng) }}
+                                                            radius={300}
+                                                            options={{ fillColor: '#10b981', fillOpacity: 0.25, strokeColor: '#10b981', strokeWeight: 1, zIndex: 2 }} />
+                                                    </>
+                                                )}
+
+                                                {/* 4. Unconditionally render playback arrow on top */}
                                                 {playbackArrow}
                                             </>
                                         );
