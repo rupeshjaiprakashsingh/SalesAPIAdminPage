@@ -3,8 +3,6 @@ import axios from "axios";
 import { GoogleMap, Marker, Polyline, Circle } from "@react-google-maps/api";
 import { getToken, getSmoothedPath, containerStyle, defaultPosition } from "./geoUtils";
 
-const targetSvgUrl = `data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2228%22%20height%3D%2228%22%20viewBox%3D%220%200%2028%2028%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%20%20%3Ccircle%20cx%3D%2214%22%20cy%3D%2214%22%20r%3D%2212%22%20fill%3D%22%23111827%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%222.5%22%2F%3E%0A%20%20%3Ccircle%20cx%3D%2214%22%20cy%3D%2214%22%20r%3D%224%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M14%206v4m0%208v4m-8-8h4m8%200h4%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%2F%3E%0A%3C%2Fsvg%3E`;
-
 const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
     const todayStr = new Date().toISOString().split("T")[0];
 
@@ -414,27 +412,17 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                 <React.Fragment key={`route-wrapper-${timelineUser}-${timelineDate}`}>
                                     {fullRoutePath.length > 0 && (() => {
                                         const curPt = smoothedTimelinePath[playbackState.currentIndex];
-                                        let currentHeading = 0;
-                                        if (window.google && smoothedTimelinePath.length > 1) {
-                                            const idx = playbackState.currentIndex;
-                                            if (idx > 0) {
-                                                const p1 = new window.google.maps.LatLng(smoothedTimelinePath[idx - 1].lat, smoothedTimelinePath[idx - 1].lng);
-                                                const p2 = new window.google.maps.LatLng(curPt.lat, curPt.lng);
-                                                currentHeading = window.google.maps.geometry.spherical.computeHeading(p1, p2);
-                                            } else {
-                                                const p1 = new window.google.maps.LatLng(curPt.lat, curPt.lng);
-                                                const p2 = new window.google.maps.LatLng(smoothedTimelinePath[1].lat, smoothedTimelinePath[1].lng);
-                                                currentHeading = window.google.maps.geometry.spherical.computeHeading(p1, p2);
-                                            }
-                                        }
-
                                         const playbackArrow = smoothedTimelinePath.length > 0 && window.google && (
                                             <Marker
                                                 position={{ lat: curPt?.lat || 0, lng: curPt?.lng || 0 }}
                                                 icon={{
                                                     path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                                                    scale: 7, fillColor: '#22c55e', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2.5,
-                                                    rotation: currentHeading
+                                                    scale: 7, fillColor: '#10b981', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 1,
+                                                    rotation: playbackState.currentIndex > 0
+                                                        ? window.google?.maps?.geometry?.spherical?.computeHeading(
+                                                            new window.google.maps.LatLng(smoothedTimelinePath[playbackState.currentIndex - 1].lat, smoothedTimelinePath[playbackState.currentIndex - 1].lng),
+                                                            new window.google.maps.LatLng(curPt.lat, curPt.lng)
+                                                        ) || 0 : 0
                                                 }}
                                                 zIndex={100}
                                             />
@@ -457,12 +445,12 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                                 <>
                                                     {highlightedSegments.map((hSeg, idx) => (
                                                         <Polyline key={`drive-only-${activeTimelineEvent.id}-${idx}`} path={hSeg}
-                                                            options={{ strokeColor: '#22c55e', strokeOpacity: 1, strokeWeight: 6, zIndex: 5 }} />
+                                                            options={{ strokeColor: '#16a34a', strokeOpacity: 1, strokeWeight: 5, zIndex: 5 }} />
                                                     ))}
                                                     {window.google && <Marker key={`drive-s-${activeTimelineEvent.id}`}
                                                         position={{ lat: firstPt.lat, lng: firstPt.lng }}
-                                                        icon={{ url: targetSvgUrl, scaledSize: new window.google.maps.Size(28, 28), anchor: new window.google.maps.Point(14, 14) }}
-                                                        zIndex={10} />}
+                                                        icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#16a34a', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
+                                                        label={{ text: 'S', color: 'white', fontSize: '8px', fontWeight: 'bold' }} zIndex={10} />}
                                                     {window.google && <Marker key={`drive-e-${activeTimelineEvent.id}`}
                                                         position={{ lat: lastPt.lat, lng: lastPt.lng }}
                                                         icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: '#111827', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
@@ -493,12 +481,12 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                             <>
                                                 {routeSegments.filter(s => s.length >= 2).map((seg, idx) => (
                                                     <Polyline key={`base-seg-${idx}`} path={seg}
-                                                        options={{ strokeColor: '#22c55e', strokeOpacity: 0.9, strokeWeight: 6, zIndex: 1 }} />
+                                                        options={{ strokeColor: '#111827', strokeOpacity: 0.9, strokeWeight: 3, zIndex: 1 }} />
                                                 ))}
                                                 {window.google && <Marker
                                                     position={{ lat: fullRoutePath[0].lat, lng: fullRoutePath[0].lng }}
-                                                    icon={{ url: targetSvgUrl, scaledSize: new window.google.maps.Size(28, 28), anchor: new window.google.maps.Point(14, 14) }}
-                                                    zIndex={3} />}
+                                                    icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: '#111827', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
+                                                    label={{ text: 'S', color: 'white', fontSize: '8px', fontWeight: 'bold' }} zIndex={3} />}
                                                 {window.google && <Marker
                                                     position={{ lat: fullRoutePath[fullRoutePath.length - 1].lat, lng: fullRoutePath[fullRoutePath.length - 1].lng }}
                                                     icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: '#111827', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
