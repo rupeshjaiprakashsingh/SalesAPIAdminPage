@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const auth = require("../middleware/auth");
-const { logLocation, logLocationBatch, getLiveLocations, getUserHistory } = require("../controllers/location");
+const { logLocation, logLocationBatch, getLiveLocations, getUserHistory, updateLocationAddress } = require("../controllers/location");
 
 // App: Post single location (Legacy)
 router.post("/log", auth, logLocation);
@@ -14,5 +14,8 @@ router.get("/live", auth, getLiveLocations);
 
 // Admin: Get historical path
 router.get("/history", auth, getUserHistory);
+
+// Admin: Update location address
+router.put("/address", auth, updateLocationAddress);
 
 module.exports = router;

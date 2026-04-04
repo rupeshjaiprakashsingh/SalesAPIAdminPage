@@ -7,6 +7,7 @@ const locationLogSchema = new mongoose.Schema({
     accuracy:   { type: Number },
     speed:      { type: Number },
     battery:    { type: Number },
+    address:    { type: String }, // Address from reverse geocoding
     timestamp:  { type: Date, default: Date.now }
 });
 

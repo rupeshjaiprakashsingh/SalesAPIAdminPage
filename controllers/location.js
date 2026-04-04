@@ -212,3 +212,30 @@ exports.getUserHistory = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// Update Location Address (Reverse Geocoded from Frontend)
+exports.updateLocationAddress = async (req, res) => {
+    try {
+        const { EmployeeLocationLog } = req.models;
+        const { employeeId, lat, lng, address } = req.body;
+        
+        if (!employeeId || !lat || !lng || !address) {
+            return res.status(400).json({ success: false, message: "Missing required fields" });
+        }
+
+        // We update all logs for this employee exactly at this location
+        const result = await EmployeeLocationLog.updateMany(
+            { 
+                employeeId, 
+                latitude: Number(lat), 
+                longitude: Number(lng) 
+            },
+            { $set: { address } }
+        );
+
+        res.status(200).json({ success: true, message: "Address updated successfully" });
+    } catch (error) {
+        console.error("Address update error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

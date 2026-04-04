@@ -167,13 +167,27 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
         if (!stopsToGeocode.length) return;
         const geocoder = new window.google.maps.Geocoder();
         stopsToGeocode.forEach(e => {
-            geocoder.geocode({ location: { lat: Number(e.lat), lng: Number(e.lng) } }, (results, status) => {
+            geocoder.geocode({ location: { lat: Number(e.lat), lng: Number(e.lng) } }, async (results, status) => {
                 if (status === "OK" && results[0]) {
-                    setTimelineEvents(prev => prev.map(ev => ev.id === e.id ? { ...ev, address: results[0].formatted_address } : ev));
+                    const address = results[0].formatted_address;
+                    setTimelineEvents(prev => prev.map(ev => ev.id === e.id ? { ...ev, address } : ev));
+                    
+                    // Save to DB so it persists
+                    try {
+                        const token = getToken();
+                        await axios.put("/api/v1/location/address", {
+                            employeeId: timelineUser,
+                            lat: e.lat,
+                            lng: e.lng,
+                            address
+                        }, { headers: { Authorization: `Bearer ${token}` } });
+                    } catch (err) {
+                        console.error("Error saving geocoded address:", err);
+                    }
                 }
             });
         });
-    }, [timelineEvents, isLoaded]);
+    }, [timelineEvents, isLoaded, timelineUser]);
 
     // ─── Fit map bounds ─────────────────────────────────────────────────────
     useEffect(() => {
