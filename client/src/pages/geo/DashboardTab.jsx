@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { getToken, formatTimeStr, getBatteryColor, getBatteryIcon } from "./geoUtils";
 
-const DashboardTab = ({ onNavigateToTimeline }) => {
+const DashboardTab = ({ onNavigateToTimeline, isLoaded }) => {
     const todayStr = new Date().toISOString().split("T")[0];
     const [dashboardDate, setDashboardDate] = useState(todayStr);
     const [searchQuery, setSearchQuery] = useState("");
@@ -24,7 +24,13 @@ const DashboardTab = ({ onNavigateToTimeline }) => {
                 const res = await axios.get(`/api/v1/reports/dashboard-stats?date=${dashboardDate}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                if (res.data.success) setDashboardStats(res.data);
+                if (res.data.success) {
+                    setDashboardStats(res.data);
+                    // Trigger geocoding for rows with missing addresses
+                    if (isLoaded && window.google?.maps?.Geocoder) {
+                        geocodeMissingAddresses(res.data.data);
+                    }
+                }
             } catch (err) {
                 console.error("Error fetching dashboard stats:", err);
             } finally {
@@ -32,7 +38,48 @@ const DashboardTab = ({ onNavigateToTimeline }) => {
             }
         };
         fetchDashboardStats();
-    }, [dashboardDate]);
+    }, [dashboardDate, isLoaded]);
+
+    const geocodeMissingAddresses = async (userData) => {
+        const needsGeocoding = userData.filter(u => 
+            u.latitude && u.longitude && 
+            (!u.address || u.address === "Location not available" || u.address === "Unknown")
+        );
+        
+        if (needsGeocoding.length === 0) return;
+
+        const geocoder = new window.google.maps.Geocoder();
+        const token = getToken();
+
+        for (const user of needsGeocoding) {
+            // Rate limit geocoding calls
+            await new Promise(r => setTimeout(r, 600));
+
+            geocoder.geocode({ location: { lat: Number(user.latitude), lng: Number(user.longitude) } }, async (results, status) => {
+                if (status === "OK" && results[0]) {
+                    const finalAddress = results[0].formatted_address;
+                    
+                    // Update local state
+                    setDashboardStats(prev => ({
+                        ...prev,
+                        data: prev.data.map(u => u._id === user._id ? { ...u, address: finalAddress } : u)
+                    }));
+
+                    // Save to backend
+                    try {
+                        await axios.put("/api/v1/location/address", {
+                            employeeId: user._id,
+                            lat: user.latitude,
+                            lng: user.longitude,
+                            address: finalAddress
+                        }, { headers: { Authorization: `Bearer ${token}` } });
+                    } catch (e) {
+                        console.error("Failed to save geocoded address for dashboard:", e);
+                    }
+                }
+            });
+        }
+    };
 
     const todayData = dashboardStats.data || [];
     const summary = dashboardStats.summary || {};
@@ -165,7 +212,7 @@ const DashboardTab = ({ onNavigateToTimeline }) => {
                                         </span>
                                     </td>
                                     <td style={{ padding: '8px 16px', fontSize: '0.75rem', color: '#4b5563' }}>{Number(u.totalDistance || 0).toFixed(1)} kms</td>
-                                    <td style={{ padding: '8px 16px', fontSize: '0.75rem', color: '#4b5563' }}>{formatTimeStr(u.totalTime)}</td>
+                                    <td style={{ padding: '8px 16px', fontSize: '0.75rem', color: '#4b5563' }}>{formatTimeStr(u.totalTotal)}</td>
                                     <td style={{ padding: '8px 16px', fontSize: '0.75rem', color: '#4b5563' }}>{formatTimeStr(u.motionTime)}</td>
                                     <td style={{ padding: '8px 16px', fontSize: '0.75rem', color: '#4b5563' }}>{formatTimeStr(u.idleTime)}</td>
                                 </tr>

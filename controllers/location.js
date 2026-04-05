@@ -122,21 +122,29 @@ exports.logLocationBatch = async (req, res) => {
             });
         }
 
+        skipped = points.length - accepted.length;
         if (accepted.length > 0) {
             await EmployeeLocationLog.insertMany(accepted);
-            
-            // Latest point update
-            const lastPoint = accepted[accepted.length - 1];
+
+            // SYNC LATEST POINT TO USER MODEL (Optimizes dashboard & live tracking)
+            const latest = accepted[accepted.length - 1];
             await User.findByIdAndUpdate(userId, {
-                lastLocation: { lat: lastPoint.latitude, lng: lastPoint.longitude, timestamp: lastPoint.timestamp },
-                batteryStatus: lastPoint.battery,
-                isOnline: true
+                $set: {
+                    lastLocation: {
+                        lat: latest.latitude,
+                        lng: latest.longitude,
+                        timestamp: latest.timestamp
+                    },
+                    batteryStatus: latest.battery,
+                    isOnline: true
+                }
             });
         }
 
-        res.status(200).json({ 
-            success: true, 
-            message: `Batch processed: ${accepted.length} saved, ${skipped} filtered`,
+        res.status(201).json({
+            success: true,
+            count: accepted.length,
+            message: `Batch recorded (${accepted.length} saved, ${skipped} skipped)`,
             saved: accepted.length,
             skipped: skipped
         });
@@ -146,34 +154,27 @@ exports.logLocationBatch = async (req, res) => {
     }
 };
 
-// Get Live User Locations (Latest ping per user)
+// Optimized Get Live User Locations (From User model instead of logs)
 exports.getLiveLocations = async (req, res) => {
     try {
-        const EmployeeLocationLog = req.models.EmployeeLocationLog;
+        const User = req.models.User;
         const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-        const pipeline = [
-            { $sort: { timestamp: -1 } },
-            { $group: { _id: "$employeeId", latestLog: { $first: "$$ROOT" } } },
-            { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "userDetails" } },
-            { $unwind: "$userDetails" },
-            {
-                $project: {
-                    _id: 0,
-                    userId: "$_id",
-                    name: "$userDetails.name",
-                    email: "$userDetails.email",
-                    latitude: "$latestLog.latitude",
-                    longitude: "$latestLog.longitude",
-                    lastSeen: "$latestLog.timestamp",
-                    battery: "$latestLog.battery",
-                    isOnline: { $gte: ["$latestLog.timestamp", thirtyMinutesAgo] },
-                    accuracy: "$latestLog.accuracy"
-                }
-            },
-            { $sort: { isOnline: -1, lastSeen: -1 } }
-        ];
+        
+        // Fetch users directly (Role: user/staff)
+        const staff = await User.find({ role: "user" }).lean();
+        
+        const locations = staff.map(u => ({
+            userId: u._id,
+            name: u.name,
+            email: u.email,
+            latitude: u.lastLocation?.lat || null,
+            longitude: u.lastLocation?.lng || null,
+            lastSeen: u.lastLocation?.timestamp || null,
+            battery: u.batteryStatus,
+            isOnline: u.lastLocation?.timestamp ? (new Date(u.lastLocation.timestamp) >= thirtyMinutesAgo) : false,
+            accuracy: 0 // accuracy not stored on User for now
+        }));
 
-        const locations = await EmployeeLocationLog.aggregate(pipeline);
         res.status(200).json({ success: true, count: locations.length, data: locations });
     } catch (error) {
         res.status(500).json({ message: error.message });

@@ -637,9 +637,9 @@ exports.getTimelineReport = async (req, res) => {
         let previousLog = logs[0];
 
         // Thresholds
-        const DISTANCE_THRESHOLD = 20; // meters (to consider motion)
+        const DISTANCE_THRESHOLD = 5; // meters (to consider motion, reduced from 20 for accuracy)
         const TIME_THRESHOLD_IDLE = 5 * 60 * 1000; // 5 minutes in ms
-        const ACCURACY_THRESHOLD = 50; // meters — reject noisy GPS fixes
+        const ACCURACY_THRESHOLD = 100; // meters — broadened to include city-env tracking
         const JITTER_THRESHOLD = 10;   // meters — minimum meaningful movement
 
         // ─── STEP 1: Filter out noisy GPS fixes ─────────────────────────
@@ -945,8 +945,8 @@ exports.getDashboardStats = async (req, res) => {
             logsByUser[empId].push(log);
         });
 
-        const DISTANCE_THRESHOLD = 20; // meters (to consider motion)
-        const ACCURACY_THRESHOLD = 50; // meters — reject noisy GPS fixes
+        const DISTANCE_THRESHOLD = 5; // meters (to consider motion, reduced from 20 for better precision)
+        const ACCURACY_THRESHOLD = 100; // meters — broadened to include city-env tracking
         const JITTER_THRESHOLD = 10;   // meters — minimum meaningful movement
         const userStats = [];
 
@@ -1039,6 +1039,8 @@ exports.getDashboardStats = async (req, res) => {
                 latestAddress = userPunches[userPunches.length - 1].address;
             }
 
+            const lastPoint = rawLogs.length > 0 ? rawLogs[rawLogs.length - 1] : (userPunches.length > 0 ? userPunches[userPunches.length - 1] : null);
+            
             userStats.push({
                 _id: user._id,
                 name: user.name,
@@ -1050,7 +1052,9 @@ exports.getDashboardStats = async (req, res) => {
                 punchCount: userPunches.length,
                 tripStatus: tripStatus,
                 battery: latestBattery,
-                address: latestAddress
+                address: latestAddress,
+                latitude: lastPoint?.latitude || lastPoint?.lat || null,
+                longitude: lastPoint?.longitude || lastPoint?.lng || null
             });
         });
 

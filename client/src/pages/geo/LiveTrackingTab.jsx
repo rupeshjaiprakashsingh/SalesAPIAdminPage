@@ -50,6 +50,9 @@ const LiveTrackingTab = ({ isLoaded }) => {
 
     useEffect(() => {
         fetchLiveLocations();
+        // Set interval for immediate live monitoring (matches app sync rate)
+        const interval = setInterval(fetchLiveLocations, 10000);
+        return () => clearInterval(interval);
     }, [fetchLiveLocations]);
 
     // Map centering
@@ -111,6 +114,28 @@ const LiveTrackingTab = ({ isLoaded }) => {
         return () => window.google.maps.event.removeListener(listener);
     }, [mapInstance, hoveredEmp]);
 
+    // Reverse geocode selected employee on-demand
+    useEffect(() => {
+        if (!isLoaded || !selectedEmp || selectedEmp.address || !window.google?.maps?.Geocoder) return;
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ location: { lat: selectedEmp.latitude, lng: selectedEmp.longitude } }, (results, status) => {
+            if (status === "OK" && results[0]) {
+                const addr = results[0].formatted_address;
+                setSelectedEmp(p => p?.id === selectedEmp.id ? { ...p, address: addr } : p);
+                setEmployees(list => list.map(e => e.id === selectedEmp.id ? { ...e, address: addr } : e));
+                
+                // Save to backend (optional but helpful)
+                const token = getToken();
+                axios.put("/api/v1/location/address", {
+                    employeeId: selectedEmp.actualUserId,
+                    lat: selectedEmp.latitude,
+                    lng: selectedEmp.longitude,
+                    address: addr
+                }, { headers: { Authorization: `Bearer ${token}` } }).catch(e => console.error("Error saving live geocode:", e));
+            }
+        });
+    }, [selectedEmp, isLoaded]);
+
     return (
         <div ref={mapContainerRef} className="geo-map-container" style={{ position: 'relative', width: '100%', height: 'calc(100vh - 160px)', borderRadius: '12px', overflow: 'hidden' }}>
             {isLoaded ? (
@@ -164,6 +189,15 @@ const LiveTrackingTab = ({ isLoaded }) => {
                                             {getBatteryIcon(selectedEmp.battery)} {selectedEmp.battery != null ? `${selectedEmp.battery}%` : "N/A"}
                                         </span>
                                     </div>
+                                    {selectedEmp.address && (
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 4 }}>
+                                            <span style={{ color: "#6b7280" }}>Location</span>
+                                            <span style={{ fontWeight: 500, color: "#374151", fontSize: 12 }}>
+                                                <i className="ri-map-pin-line" style={{ marginRight: 4, color: "#3b82f6" }}></i>
+                                                {selectedEmp.address}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                                 <div style={{ borderTop: "1px solid #f3f4f6", paddingTop: 8, marginTop: 8 }}>
                                     <a

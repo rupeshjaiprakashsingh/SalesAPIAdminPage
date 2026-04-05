@@ -70,7 +70,7 @@ const GeoDashboard = () => {
                         </div>
                     )
                 )}
-                {activeTab === "Dashboard" && <DashboardTab onNavigateToTimeline={handleNavigateToTimeline} />}
+                {activeTab === "Dashboard" && <DashboardTab isLoaded={isLoaded} onNavigateToTimeline={handleNavigateToTimeline} />}
 
                 {!["Live Tracking", "Timeline", "Dashboard"].includes(activeTab) && (
                     <div style={{ padding: '60px', textAlign: 'center', color: '#6b7280', background: '#ffffff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
