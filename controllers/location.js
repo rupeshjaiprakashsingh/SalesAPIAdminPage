@@ -32,6 +32,7 @@ exports.logLocation = async (req, res) => {
             longitude,
             accuracy,
             battery: finalBattery,
+            address: req.body.address,
             timestamp: now
         });
 
@@ -116,6 +117,7 @@ exports.logLocationBatch = async (req, res) => {
                 accuracy: pt.accuracy,
                 speed: pt.speed,
                 battery: pt.battery,
+                address: pt.address,
                 timestamp: new Date(ts)
             });
         }

@@ -13,6 +13,7 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
     const [timelineLoading, setTimelineLoading] = useState(false);
     const [timelineMapInstance, setTimelineMapInstance] = useState(null);
     const [timelineEvents, setTimelineEvents] = useState([]);
+    const [dashboardStats, setDashboardStats] = useState([]);
     const [timelineSearch, setTimelineSearch] = useState("");
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [activeTimelineEvent, setActiveTimelineEvent] = useState(null);
@@ -64,10 +65,40 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
         fetchUsers();
     }, []);
 
-    // Set default user
+    // Set default user / Handle Dashboard Navigation Link
     useEffect(() => {
-        if (usersList.length > 0 && !timelineUser) setTimelineUser(usersList[0]._id);
-    }, [usersList, timelineUser]);
+        if (usersList.length > 0) {
+            const savedUserId = sessionStorage.getItem("geo_timeline_userId");
+            const savedDate = sessionStorage.getItem("geo_timeline_date");
+            
+            if (savedUserId && savedDate) {
+                setTimelineUser(savedUserId);
+                setTimelineDate(savedDate);
+                // Clear out of session storage so it doesn't trigger on every mount forever
+                sessionStorage.removeItem("geo_timeline_userId");
+                sessionStorage.removeItem("geo_timeline_date");
+            } else if (!timelineUser) {
+                setTimelineUser(usersList[0]._id);
+            }
+        }
+    }, [usersList]);
+
+    // Fetch dashboard stats for the selected date to populate the dropdown status
+    useEffect(() => {
+        const fetchStats = async () => {
+            const token = getToken();
+            if (!token) return;
+            try {
+                const res = await axios.get(`/api/v1/reports/dashboard-stats?date=${timelineDate}`, { headers: { Authorization: `Bearer ${token}` } });
+                if (res.data && res.data.data) {
+                    setDashboardStats(res.data.data);
+                }
+            } catch (err) {
+                console.error("Error fetching dashboard stats for dropdown:", err);
+            }
+        };
+        fetchStats();
+    }, [timelineDate]);
 
     // ─── Fetch timeline report ──────────────────────────────────────────────
     useEffect(() => {
@@ -105,6 +136,21 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                         if (diffMins > 10) {
                             events.push({ id: `evt-outage-${i}`, type: "Outage", time: prev.time, endTime: curr.time, durationMin: Math.round(diffMins), message: "Location services disabled" });
                         }
+                    }
+
+                    if (report.punches) {
+                        report.punches.forEach((punch, i) => {
+                            events.push({
+                                id: `evt-punch-${i}`,
+                                type: "Punch",
+                                punchType: punch.attendanceType === "IN" ? "Punch In" : "Punch Out",
+                                time: punch.deviceTime || punch.createdAt,
+                                lat: punch.latitude,
+                                lng: punch.longitude,
+                                address: punch.address || "Unknown Address",
+                                deviceId: punch.deviceId
+                            });
+                        });
                     }
 
                     events.sort((a, b) => new Date(a.time) - new Date(b.time));
@@ -165,28 +211,64 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
         if (!isLoaded || !window.google?.maps?.Geocoder || !timelineEvents.length) return;
         const stopsToGeocode = timelineEvents.filter(e => e.type === "Stop" && (!e.address || e.address === "Unknown Location" || e.address === "Unknown"));
         if (!stopsToGeocode.length) return;
+        if (window._isGeocodingStops) return;
+        window._isGeocodingStops = true;
+
         const geocoder = new window.google.maps.Geocoder();
-        stopsToGeocode.forEach(e => {
-            geocoder.geocode({ location: { lat: Number(e.lat), lng: Number(e.lng) } }, async (results, status) => {
-                if (status === "OK" && results[0]) {
-                    const address = results[0].formatted_address;
-                    setTimelineEvents(prev => prev.map(ev => ev.id === e.id ? { ...ev, address } : ev));
-                    
-                    // Save to DB so it persists
-                    try {
-                        const token = getToken();
-                        await axios.put("/api/v1/location/address", {
-                            employeeId: timelineUser,
-                            lat: e.lat,
-                            lng: e.lng,
-                            address
-                        }, { headers: { Authorization: `Bearer ${token}` } });
-                    } catch (err) {
-                        console.error("Error saving geocoded address:", err);
-                    }
-                }
-            });
-        });
+        
+        const processStopsSequentially = async () => {
+            for (const e of stopsToGeocode) {
+                // Sleep for 700ms between Google API requests to prevent OVER_QUERY_LIMIT
+                await new Promise(res => setTimeout(res, 700));
+                
+                await new Promise(resolve => {
+                    geocoder.geocode({ location: { lat: Number(e.lat), lng: Number(e.lng) } }, async (results, status) => {
+                        let finalAddress = null;
+
+                        if (status === "OK" && results[0]) {
+                            finalAddress = results[0].formatted_address;
+                        } else {
+                            console.warn(`Google Geocoding failed for ${e.lat},${e.lng}. Status: ${status}. Trying Fallback Nominiatim...`);
+                            try {
+                                const osmRes = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${e.lat}&lon=${e.lng}`);
+                                if (osmRes.data && osmRes.data.display_name) {
+                                     finalAddress = osmRes.data.display_name;
+                                }
+                            } catch (osmErr) {
+                                console.error("OSM Fallback also failed.");
+                            }
+                        }
+
+                        if (!finalAddress) {
+                            finalAddress = "Address not found"; // stop retries
+                        }
+
+                        // Update State visually
+                        setTimelineEvents(prev => prev.map(ev => ev.id === e.id ? { ...ev, address: finalAddress } : ev));
+
+                        // Save to backend (only if we got a real address, don't save the 'not found' text over and over)
+                        if (finalAddress !== "Address not found") {
+                            try {
+                                const token = getToken();
+                                await axios.put("/api/v1/location/address", {
+                                    employeeId: timelineUser,
+                                    lat: e.lat,
+                                    lng: e.lng,
+                                    address: finalAddress
+                                }, { headers: { Authorization: `Bearer ${token}` } });
+                            } catch (err) {
+                                console.error("Error saving geocoded address:", err);
+                            }
+                        }
+                        
+                        resolve();
+                    });
+                });
+            }
+            window._isGeocodingStops = false;
+        };
+
+        processStopsSequentially();
     }, [timelineEvents, isLoaded, timelineUser]);
 
     // ─── Fit map bounds ─────────────────────────────────────────────────────
@@ -270,21 +352,37 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                     </div>
                                 </div>
                                 <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
-                                    {usersList.filter(u => `${u.name} ${u.employeeId || ""}`.toLowerCase().includes(timelineSearch.toLowerCase())).map(usr => (
-                                        <div
-                                            key={usr._id}
-                                            onClick={() => { setTimelineUser(usr._id); setIsDropdownOpen(false); setTimelineSearch(""); }}
-                                            style={{ padding: '10px 16px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: timelineUser === usr._id ? '#f8fafc' : '#fff' }}
-                                            onMouseOver={(e) => e.currentTarget.style.background = '#f1f5f9'}
-                                            onMouseOut={(e) => e.currentTarget.style.background = timelineUser === usr._id ? '#f8fafc' : '#fff'}
-                                        >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: timelineUser === usr._id ? '#3b82f6' : 'transparent' }}></div>
-                                                <span style={{ fontSize: '0.8rem', color: '#374151', fontWeight: 500 }}>{usr.name.toUpperCase()} <span style={{ color: '#6b7280', fontWeight: 400 }}>{usr.employeeId ? `(${usr.employeeId})` : ""}</span></span>
+                                    {usersList
+                                        .filter(u => `${u.name} ${u.employeeId || ""}`.toLowerCase().includes(timelineSearch.toLowerCase()))
+                                        .sort((a, b) => {
+                                            const statA = dashboardStats.find(s => s._id === a._id);
+                                            const statB = dashboardStats.find(s => s._id === b._id);
+                                            const aOnTrip = statA && (statA.totalDistance > 0 || statA.motionTime > 0 || statA.punchCount > 0) ? 1 : 0;
+                                            const bOnTrip = statB && (statB.totalDistance > 0 || statB.motionTime > 0 || statB.punchCount > 0) ? 1 : 0;
+                                            if (aOnTrip !== bOnTrip) return bOnTrip - aOnTrip;
+                                            return a.name.localeCompare(b.name);
+                                        })
+                                        .map(usr => {
+                                        const userStat = dashboardStats.find(s => s._id === usr._id);
+                                        const isOnTrip = userStat && (userStat.totalDistance > 0 || userStat.motionTime > 0 || userStat.punchCount > 0);
+                                        return (
+                                            <div
+                                                key={usr._id}
+                                                onClick={() => { setTimelineUser(usr._id); setIsDropdownOpen(false); setTimelineSearch(""); }}
+                                                style={{ padding: '10px 16px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: timelineUser === usr._id ? '#f8fafc' : '#fff' }}
+                                                onMouseOver={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                                onMouseOut={(e) => e.currentTarget.style.background = timelineUser === usr._id ? '#f8fafc' : '#fff'}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: timelineUser === usr._id ? '#3b82f6' : 'transparent' }}></div>
+                                                    <span style={{ fontSize: '0.8rem', color: '#374151', fontWeight: 500 }}>{usr.name.toUpperCase()} <span style={{ color: '#6b7280', fontWeight: 400 }}>{usr.employeeId ? `(${usr.employeeId})` : ""}</span></span>
+                                                </div>
+                                                <span style={{ fontSize: '0.7rem', fontWeight: 600, color: isOnTrip ? '#10b981' : '#eab308' }}>
+                                                    {isOnTrip ? 'On Trip' : 'Not Traveled'}
+                                                </span>
                                             </div>
-                                            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#eab308' }}>Not Traveled</span>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
@@ -370,7 +468,7 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                             setPlaybackState(p => ({ ...p, isPlaying: false, currentIndex: closestIdx }));
                                         }
                                     }}
-                                    style={{ display: 'flex', marginBottom: '6px', position: 'relative', cursor: 'pointer', background: isActive ? '#f0fdf4' : 'transparent', border: isActive ? '1px solid #10b981' : '1px solid transparent', borderRadius: '8px', padding: '12px 8px', marginLeft: '4px', marginRight: '4px' }}
+                                    style={{ display: 'flex', marginBottom: '6px', position: 'relative', cursor: 'pointer', background: isActive || evt.type === 'Punch' ? '#f0fdf4' : 'transparent', border: isActive || evt.type === 'Punch' ? '1px solid #10b981' : '1px solid transparent', borderRadius: '8px', padding: '12px 8px', marginLeft: '4px', marginRight: '4px' }}
                                 >
                                     {idx !== timelineEvents.length - 1 && (
                                         <div style={{ position: 'absolute', left: '68px', top: '38px', bottom: '-15px', width: '1px', background: '#d1d5db', zIndex: 1 }}></div>
@@ -382,12 +480,13 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                         {evt.type === 'Start' ? <i className="ri-focus-3-line" style={{ color: isActive ? '#10b981' : '#6b7280', fontSize: '1.2rem', marginTop: '-2px' }}></i>
                                             : evt.type === 'Stop' ? <i className="ri-hourglass-2-line" style={{ color: isActive ? '#10b981' : '#6b7280', fontSize: '1.1rem', marginTop: '-1px' }}></i>
                                                 : evt.type === 'Outage' ? <i className="ri-cloud-off-line" style={{ color: '#ef4444', fontSize: '1.2rem', marginTop: '-2px' }}></i>
+                                                    : evt.type === 'Punch' ? <i className="ri-price-tag-3-line" style={{ color: '#10b981', fontSize: '1.2rem', marginTop: '-2px' }}></i>
                                                     : <i className="ri-steering-2-line" style={{ color: isActive ? '#10b981' : '#6b7280', fontSize: '1.2rem', marginTop: '-2px' }}></i>}
                                     </div>
                                     <div style={{ flex: 1, paddingLeft: '8px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <span style={{ fontWeight: 600, fontSize: '0.75rem', color: evt.type === 'Outage' ? '#ef4444' : (isActive ? '#10b981' : '#111827') }}>
-                                                {evt.type === 'Start' ? 'Tracking Started' : evt.type}
+                                            <span style={{ fontWeight: 600, fontSize: '0.75rem', color: evt.type === 'Outage' ? '#ef4444' : (isActive || evt.type === 'Punch' ? '#111827' : '#111827') }}>
+                                                {evt.type === 'Start' ? 'Tracking Started' : evt.type === 'Punch' ? 'Geotag' : evt.type}
                                             </span>
                                             {evt.type === 'Drive' && (
                                                 <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline' }}>
@@ -397,8 +496,10 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                             )}
                                             {evt.type === 'Stop' && <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>{evt.duration >= 60 ? `${Math.floor(evt.duration / 60)}h ${evt.duration % 60}m` : `${evt.duration}m`}</span>}
                                             {evt.type === 'Outage' && <span style={{ fontSize: '0.75rem', color: '#111827', fontWeight: 600 }}>{evt.durationMin >= 60 ? `${Math.floor(evt.durationMin / 60)}h ${evt.durationMin % 60}m` : `${evt.durationMin}m`}</span>}
+                                            {evt.type === 'Punch' && <span style={{ fontSize: '0.65rem', border: '1px solid #10b981', background: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{evt.punchType}</span>}
                                         </div>
-                                        {evt.address && evt.type === 'Stop' && <div style={{ fontSize: '0.72rem', color: isActive ? '#16a34a' : '#6b7280', marginTop: '6px', lineHeight: '1.4' }}>{evt.address}</div>}
+                                        {evt.deviceId && evt.type === 'Punch' && <div style={{ fontSize: '0.68rem', color: '#10b981', marginTop: '2px', fontFamily: 'monospace' }}>{evt.deviceId}</div>}
+                                        {evt.address && (evt.type === 'Stop' || evt.type === 'Punch') && <div style={{ fontSize: '0.72rem', color: (isActive || evt.type === 'Punch') ? '#16a34a' : '#6b7280', marginTop: '6px', lineHeight: '1.4' }}>{evt.address}</div>}
                                         {evt.type === 'Outage' && evt.message && (
                                             <div style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '6px', lineHeight: '1.4', background: '#fef2f2', border: '1px solid #fecaca', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
                                                 {evt.message} <i className="ri-error-warning-line" style={{ marginLeft: '4px' }}></i>
@@ -457,6 +558,25 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                                     position={{ lat: fullRoutePath[fullRoutePath.length - 1].lat, lng: fullRoutePath[fullRoutePath.length - 1].lng }}
                                                     icon={{ path: window.google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: '#111827', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 }}
                                                     zIndex={3} />}
+
+                                                {/* Render ALL Punch Markers directly */}
+                                                {timelineEvents.filter(e => e.type === 'Punch').map(e => (
+                                                    window.google && <Marker
+                                                        key={`punch-marker-${e.id}`}
+                                                        position={{ lat: Number(e.lat), lng: Number(e.lng) }}
+                                                        icon={{
+                                                            path: "M17.5 5.5l-6-6a1 1 0 0 0-1.414 0l-9.5 9.5a1 1 0 0 0 0 1.414l6 6a1 1 0 0 0 1.414 0l9.5-9.5a1 1 0 0 0 .5-.707V6a1 1 0 0 0-1-1zm-2 2a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z",
+                                                            scale: 1,
+                                                            anchor: new window.google.maps.Point(10, 10),
+                                                            fillColor: "#10b981",
+                                                            fillOpacity: 1,
+                                                            strokeColor: "#ffffff",
+                                                            strokeWeight: 1,
+                                                        }}
+                                                        zIndex={8}
+                                                        onClick={() => setActiveTimelineEvent(activeTimelineEvent?.id === e.id ? null : e)}
+                                                    />
+                                                ))}
 
                                                 {/* 2. Conditionally overlay DRIVE segment if selected */}
                                                 {activeTimelineEvent?.type === 'Drive' && (() => {

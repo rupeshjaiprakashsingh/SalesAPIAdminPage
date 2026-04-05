@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { getToken, formatTimeStr } from "./geoUtils";
+import { getToken, formatTimeStr, getBatteryColor, getBatteryIcon } from "./geoUtils";
 
 const DashboardTab = ({ onNavigateToTimeline }) => {
     const todayStr = new Date().toISOString().split("T")[0];
@@ -117,7 +117,7 @@ const DashboardTab = ({ onNavigateToTimeline }) => {
                         <thead>
                             <tr style={{ background: '#fdfdfd', borderBottom: '1px solid #f3f4f6' }}>
                                 {['Name', 'Status', 'Total Distance', 'Total Time', 'Total Time In Motion', 'Total Time At Rest'].map(h => (
-                                    <th key={h} style={{ padding: '14px 20px', fontSize: '0.75rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' }}>{h}</th>
+                                    <th key={h} style={{ padding: '8px 16px', fontSize: '0.65rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' }}>{h}</th>
                                 ))}
                             </tr>
                         </thead>
@@ -126,26 +126,48 @@ const DashboardTab = ({ onNavigateToTimeline }) => {
                                 <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>Fetching dashboard data...</td></tr>
                             ) : todayData.filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
                                 <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>No tracking data found for this date</td></tr>
-                            ) : todayData.filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase())).map((u, idx) => (
+                            ) : todayData
+                                .filter(u => u.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                                .sort((a, b) => {
+                                    const valA = a.tripStatus === 'On Trip' ? 2 : (a.tripStatus === 'Traveled' ? 1 : 0);
+                                    const valB = b.tripStatus === 'On Trip' ? 2 : (b.tripStatus === 'Traveled' ? 1 : 0);
+                                    if (valA !== valB) return valB - valA;
+                                    return a.name.localeCompare(b.name);
+                                })
+                                .map((u, idx) => (
                                 <tr key={idx} style={{ borderBottom: '1px solid #f9fafb' }}>
-                                    <td style={{ padding: '14px 20px' }}>
-                                        <div
-                                            style={{ display: 'flex', flexDirection: 'column', gap: '2px', cursor: 'pointer' }}
-                                            onClick={() => onNavigateToTimeline && onNavigateToTimeline(u._id, dashboardDate)}
-                                        >
-                                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6', textTransform: 'uppercase' }} title="View Timeline">{u.name}</span>
-                                            {u.employeeId && <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{u.employeeId}</span>}
+                                    <td style={{ padding: '8px 16px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div
+                                                style={{ display: 'flex', flexDirection: 'column', gap: '2px', cursor: 'pointer', maxWidth: '280px' }}
+                                                onClick={() => onNavigateToTimeline && onNavigateToTimeline(u._id, dashboardDate)}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#3b82f6', textTransform: 'uppercase' }} title="View Timeline">{u.name}</span>
+                                                    {u.employeeId && <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}>{u.employeeId}</span>}
+                                                </div>
+                                                {u.address && u.address !== "Location not available" && (
+                                                    <span style={{ fontSize: '0.65rem', color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={u.address}>
+                                                        <i className="ri-map-pin-line" style={{ marginRight: '2px' }}></i>{u.address}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {u.battery != null && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600, color: getBatteryColor(u.battery), minWidth: '45px', justifyContent: 'flex-end', cursor: 'default' }} title={`Latest Battery: ${u.battery}%`}>
+                                                    <span style={{ fontSize: '0.9rem' }}>{getBatteryIcon(u.battery)}</span> {u.battery}%
+                                                </div>
+                                            )}
                                         </div>
                                     </td>
-                                    <td style={{ padding: '14px 20px' }}>
-                                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: u.totalDistance > 0 ? '#10b981' : '#eab308' }}>
-                                            {u.totalDistance > 0 ? 'Traveled' : 'Not Traveled'}
+                                    <td style={{ padding: '8px 16px' }}>
+                                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: u.tripStatus === 'On Trip' ? '#10b981' : (u.tripStatus === 'Traveled' ? '#6b7280' : '#eab308') }}>
+                                            {u.tripStatus || (u.totalDistance > 0 ? 'Traveled' : 'Not Traveled')}
                                         </span>
                                     </td>
-                                    <td style={{ padding: '14px 20px', fontSize: '0.85rem', color: '#4b5563' }}>{Number(u.totalDistance || 0).toFixed(1)} kms</td>
-                                    <td style={{ padding: '14px 20px', fontSize: '0.85rem', color: '#4b5563' }}>{formatTimeStr(u.totalTime)}</td>
-                                    <td style={{ padding: '14px 20px', fontSize: '0.85rem', color: '#4b5563' }}>{formatTimeStr(u.motionTime)}</td>
-                                    <td style={{ padding: '14px 20px', fontSize: '0.85rem', color: '#4b5563' }}>{formatTimeStr(u.idleTime)}</td>
+                                    <td style={{ padding: '8px 16px', fontSize: '0.75rem', color: '#4b5563' }}>{Number(u.totalDistance || 0).toFixed(1)} kms</td>
+                                    <td style={{ padding: '8px 16px', fontSize: '0.75rem', color: '#4b5563' }}>{formatTimeStr(u.totalTime)}</td>
+                                    <td style={{ padding: '8px 16px', fontSize: '0.75rem', color: '#4b5563' }}>{formatTimeStr(u.motionTime)}</td>
+                                    <td style={{ padding: '8px 16px', fontSize: '0.75rem', color: '#4b5563' }}>{formatTimeStr(u.idleTime)}</td>
                                 </tr>
                             ))}
                         </tbody>

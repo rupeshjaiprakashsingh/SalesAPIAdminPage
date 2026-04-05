@@ -600,6 +600,12 @@ exports.getTimelineReport = async (req, res) => {
 
         // Fetch logs (using EmployeeLocationLog for precise map routing)
         const EmployeeLocationLog = req.models.EmployeeLocationLog;
+        const Attendance = req.models.Attendance;
+
+        const punches = await Attendance.find({
+            userId: userId,
+            deviceTime: { $gte: startOfDay, $lte: endOfDay }
+        }).sort({ deviceTime: 1 }).lean();
         const logs = await EmployeeLocationLog.find({
             employeeId: userId,
             timestamp: { $gte: startOfDay, $lte: endOfDay }
@@ -615,7 +621,8 @@ exports.getTimelineReport = async (req, res) => {
                     idleTime: 0,
                     motionTime: 0,
                     stopDetails: [],
-                    route: []
+                    route: [],
+                    punches: punches || []
                 }
             });
         }
@@ -731,7 +738,7 @@ exports.getTimelineReport = async (req, res) => {
                         startTime: previousLog.timestamp,
                         endTime: currentLog.timestamp,
                         duration: Math.round(timeDiffMin),
-                        address: currentLog.address || "Unknown"
+                        address: currentLog.address || previousLog.address || "Unknown"
                     });
                 }
             }
@@ -755,6 +762,7 @@ exports.getTimelineReport = async (req, res) => {
             idleTime: Math.round(idleTime),
             motionTime: Math.round(motionTime),
             stopDetails,
+            punches,
             route // Return cleaned route points for mapping
         };
 
@@ -914,6 +922,21 @@ exports.getDashboardStats = async (req, res) => {
             timestamp: { $gte: startOfDay, $lte: endOfDay }
         }).sort({ timestamp: 1 }).lean();
 
+        // Fetch all punches for the day
+        const Attendance = req.models.Attendance;
+        const allPunches = await Attendance.find({
+            deviceTime: { $gte: startOfDay, $lte: endOfDay }
+        }).lean();
+        
+        const punchesByUser = {};
+        allPunches.forEach(p => {
+            if (p.userId) {
+                const empId = p.userId.toString();
+                if (!punchesByUser[empId]) punchesByUser[empId] = [];
+                punchesByUser[empId].push(p);
+            }
+        });
+
         // Group logs by employeeId
         const logsByUser = {};
         logs.forEach(log => {
@@ -985,14 +1008,49 @@ exports.getDashboardStats = async (req, res) => {
             systemMotionTime += Math.round(motionTime);
             systemIdleTime += Math.round(idleTime);
 
+            const userPunches = punchesByUser[user._id.toString()] || [];
+            const hasPunchIn = userPunches.some(p => p.attendanceType === "IN");
+            const hasPunchOut = userPunches.some(p => p.attendanceType === "OUT");
+
+            const isToday = new Date().toISOString().split('T')[0] === startOfDay.toISOString().split('T')[0];
+            const lastLogTime = rawLogs.length > 0 ? new Date(rawLogs[rawLogs.length - 1].timestamp).getTime() : 0;
+            const oneHourAgo = Date.now() - (60 * 60 * 1000);
+
+            let tripStatus = "Not Traveled";
+            if (isToday && ((hasPunchIn && !hasPunchOut) || lastLogTime > oneHourAgo)) {
+                tripStatus = "On Trip";
+            } else if (finalDistanceKm > 0 || userPunches.length > 0) {
+                tripStatus = "Traveled";
+            }
+
+            let latestBattery = user.batteryStatus; // Real-time battery from User model
+            if (latestBattery == null) {
+                if (rawLogs.length > 0 && rawLogs[rawLogs.length - 1].battery !== undefined) {
+                    latestBattery = rawLogs[rawLogs.length - 1].battery;
+                } else if (userPunches.length > 0 && userPunches[userPunches.length - 1].battery !== undefined) {
+                    latestBattery = userPunches[userPunches.length - 1].battery;
+                }
+            }
+
+            let latestAddress = "Location not available";
+            if (rawLogs.length > 0 && rawLogs[rawLogs.length - 1].address) {
+                latestAddress = rawLogs[rawLogs.length - 1].address;
+            } else if (userPunches.length > 0 && userPunches[userPunches.length - 1].address) {
+                latestAddress = userPunches[userPunches.length - 1].address;
+            }
+
             userStats.push({
                 _id: user._id,
                 name: user.name,
                 employeeId: user.employeeId || "",
                 totalDistance: finalDistanceKm, // km
-                totalTime: totalTime, // minutes
+                totalTotal: totalTime, // minutes
                 motionTime: Math.round(motionTime), // minutes
-                idleTime: Math.round(idleTime) // minutes
+                idleTime: Math.round(idleTime), // minutes
+                punchCount: userPunches.length,
+                tripStatus: tripStatus,
+                battery: latestBattery,
+                address: latestAddress
             });
         });
 
