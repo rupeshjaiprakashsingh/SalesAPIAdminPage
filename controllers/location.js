@@ -133,6 +133,7 @@ exports.logLocationBatch = async (req, res) => {
                     lastLocation: {
                         lat: latest.latitude,
                         lng: latest.longitude,
+                        address: latest.address,
                         timestamp: latest.timestamp
                     },
                     batteryStatus: latest.battery,
@@ -169,6 +170,7 @@ exports.getLiveLocations = async (req, res) => {
             email: u.email,
             latitude: u.lastLocation?.lat || null,
             longitude: u.lastLocation?.lng || null,
+            address: u.lastLocation?.address || null,
             lastSeen: u.lastLocation?.timestamp || null,
             battery: u.batteryStatus,
             isOnline: u.lastLocation?.timestamp ? (new Date(u.lastLocation.timestamp) >= thirtyMinutesAgo) : false,

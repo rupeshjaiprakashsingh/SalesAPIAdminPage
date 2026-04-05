@@ -137,7 +137,8 @@ const LiveTrackingTab = ({ isLoaded }) => {
     }, [selectedEmp, isLoaded]);
 
     return (
-        <div ref={mapContainerRef} className="geo-map-container" style={{ position: 'relative', width: '100%', height: 'calc(100vh - 160px)', borderRadius: '12px', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', width: '100%', height: 'calc(100vh - 160px)', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+            <div ref={mapContainerRef} className="geo-map-container" style={{ position: 'relative', flex: 1, height: '100%' }}>
             {isLoaded ? (
                 <GoogleMap
                     mapContainerStyle={containerStyle}
@@ -264,6 +265,69 @@ const LiveTrackingTab = ({ isLoaded }) => {
                     </div>
                 </div>
             )}
+            </div>
+
+            {/* Sidebar List of All Field Staff */}
+            <div style={{
+                width: 280,
+                background: "white",
+                borderLeft: "1px solid #e5e7eb",
+                overflowY: "auto",
+                flexShrink: 0,
+            }}>
+                <div style={{ padding: "12px 14px", borderBottom: "1px solid #f3f4f6" }}>
+                    <h3 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#6b7280", letterSpacing: "0.5px" }}>
+                        FIELD STAFF ({employees.length})
+                    </h3>
+                </div>
+
+                {!loading && employees.length === 0 && (
+                    <div style={{ padding: 20, textAlign: "center", color: "#9ca3af", fontSize: 13 }}>
+                        No live tracking data yet.
+                    </div>
+                )}
+
+                {employees.map((emp) => (
+                    <div
+                        key={emp.id}
+                        onClick={() => setSelectedEmp(emp)}
+                        onMouseEnter={() => {
+                            if (mapInstance && emp.latitude && emp.longitude) {
+                                mapInstance.panTo({ lat: emp.latitude, lng: emp.longitude });
+                            }
+                            showTooltip(emp);
+                        }}
+                        onMouseLeave={hideTooltip}
+                        style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #f9fafb",
+                            cursor: "pointer",
+                            background: selectedEmp?.id === emp.id ? "#eff6ff" : "white",
+                            borderLeft: selectedEmp?.id === emp.id ? "3px solid #2563eb" : "3px solid transparent",
+                        }}
+                    >
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontSize: 9 }}>{emp.isOnline ? "🟢" : "⚫"}</span>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {emp.name}
+                            </span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                            <span style={{ fontSize: 12, color: getBatteryColor(emp.battery), fontWeight: 600 }}>
+                                {getBatteryIcon(emp.battery)} {emp.battery != null ? `${emp.battery}%` : "N/A"}
+                            </span>
+                            <span style={{ fontSize: 11, color: emp.status === "Checked In" ? "#16a34a" : "#9ca3af", fontWeight: 600 }}>
+                                {emp.status}
+                            </span>
+                        </div>
+                        {emp.address && emp.address !== "Location not available" && (
+                            <div style={{ marginTop: 4, fontSize: "0.65rem", color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                <i className="ri-map-pin-line" style={{ marginRight: 2 }}></i>{emp.address}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };

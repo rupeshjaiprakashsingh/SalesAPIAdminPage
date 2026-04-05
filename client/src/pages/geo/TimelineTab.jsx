@@ -18,6 +18,60 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [activeTimelineEvent, setActiveTimelineEvent] = useState(null);
     const [playbackState, setPlaybackState] = useState({ isPlaying: false, speed: 1, currentIndex: 0 });
+    const [liveLocation, setLiveLocation] = useState(null);
+
+    // ─── Live Location Sync for Today's Timeline ─────────────────────────────
+    const fetchLiveLocation = useCallback(async () => {
+        if (!timelineUser || timelineDate !== todayStr) {
+            setLiveLocation(null);
+            return;
+        }
+        const token = getToken();
+        if (!token) return;
+        try {
+            const res = await axios.get("/api/v1/attendance/live-locations", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.data.success) {
+                const live = res.data.data.find(u => String(u.userId) === String(timelineUser));
+                if (live && live.latitude && live.longitude) {
+                    setLiveLocation(live);
+                }
+            }
+        } catch (err) {
+            console.error("Error fetching live location for timeline:", err);
+        }
+    }, [timelineUser, timelineDate, todayStr]);
+
+    useEffect(() => {
+        fetchLiveLocation();
+        if (timelineDate === todayStr) {
+            const interval = setInterval(fetchLiveLocation, 10000);
+            return () => clearInterval(interval);
+        }
+    }, [fetchLiveLocation, timelineDate, todayStr]);
+
+    // ─── Live Geocoding Fallback (If Backend Address missing) ────────────────
+    useEffect(() => {
+        if (!isLoaded || !liveLocation || liveLocation.address || !window.google?.maps?.Geocoder) return;
+        
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ location: { lat: Number(liveLocation.latitude), lng: Number(liveLocation.longitude) } }, (results, status) => {
+            if (status === "OK" && results[0]) {
+                const addr = results[0].formatted_address;
+                setLiveLocation(prev => ({ ...prev, address: addr }));
+                
+                // Save to backend once
+                const token = getToken();
+                axios.put("/api/v1/location/address", {
+                    employeeId: timelineUser,
+                    lat: liveLocation.latitude,
+                    lng: liveLocation.longitude,
+                    address: addr
+                }, { headers: { Authorization: `Bearer ${token}` } }).catch(e => console.error("Error saving live geocode:", e));
+            }
+        });
+    }, [liveLocation?.latitude, liveLocation?.longitude, isLoaded, timelineUser]);
 
 
     // ─── Derived data ───────────────────────────────────────────────────────
@@ -273,15 +327,25 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
 
     // ─── Fit map bounds ─────────────────────────────────────────────────────
     useEffect(() => {
-        if (!timelineMapInstance || !window.google || !fullRoutePath.length) return;
+        if (!timelineMapInstance || !window.google) return;
         const bounds = new window.google.maps.LatLngBounds();
-        fullRoutePath.forEach(pt => { if (pt?.lat != null && pt?.lng != null) bounds.extend(new window.google.maps.LatLng(pt.lat, pt.lng)); });
-        timelineMapInstance.fitBounds(bounds);
-        const listener = window.google.maps.event.addListener(timelineMapInstance, 'idle', () => {
-            if (timelineMapInstance.getZoom() > 16) timelineMapInstance.setZoom(16);
-            window.google.maps.event.removeListener(listener);
-        });
-    }, [fullRoutePath, timelineMapInstance]);
+        let hasPoints = false;
+        
+        fullRoutePath.forEach(pt => { if (pt?.lat != null && pt?.lng != null) { bounds.extend(new window.google.maps.LatLng(pt.lat, pt.lng)); hasPoints = true; } });
+        
+        if (liveLocation?.latitude && liveLocation?.longitude) {
+            bounds.extend(new window.google.maps.LatLng(liveLocation.latitude, liveLocation.longitude));
+            hasPoints = true;
+        }
+
+        if (hasPoints) {
+            timelineMapInstance.fitBounds(bounds);
+            const listener = window.google.maps.event.addListener(timelineMapInstance, 'idle', () => {
+                if (timelineMapInstance.getZoom() > 16) timelineMapInstance.setZoom(16);
+                window.google.maps.event.removeListener(listener);
+            });
+        }
+    }, [fullRoutePath, timelineMapInstance, liveLocation]);
 
     // ─── Playback ──────────────────────────────────────────────────────────
     useEffect(() => { setPlaybackState({ isPlaying: false, speed: 1, currentIndex: 0 }); }, [timelineReport]);
@@ -437,6 +501,49 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                     </div>
 
                     <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 16px 0' }}>
+                        {/* Live Now Card (Visible only for today) */}
+                        {liveLocation && (
+                            <div
+                                onClick={() => {
+                                    if (timelineMapInstance && liveLocation.latitude) {
+                                        timelineMapInstance.panTo({ lat: liveLocation.latitude, lng: liveLocation.longitude });
+                                        timelineMapInstance.setZoom(17);
+                                    }
+                                }}
+                                style={{
+                                    margin: '0 8px 16px 8px',
+                                    padding: '12px',
+                                    background: '#eff6ff',
+                                    border: '1px solid #3b82f6',
+                                    borderRadius: '10px',
+                                    cursor: 'pointer',
+                                    position: 'relative',
+                                    boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.1)'
+                                }}
+                            >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <div className="pulse-dot" style={{ width: '8px', height: '8px', background: '#3b82f6', borderRadius: '50%' }}></div>
+                                        <span style={{ fontWeight: 700, fontSize: '0.75rem', color: '#1e40af' }}>LIVE NOW — {liveLocation.name}</span>
+                                    </div>
+                                    <span style={{ fontSize: '0.7rem', color: '#60a5fa', fontWeight: 600 }}>
+                                        {liveLocation.lastSeen ? new Date(liveLocation.lastSeen).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : "Now"}
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                    <i className="ri-map-pin-2-fill" style={{ color: '#3b82f6', fontSize: '1.2rem', marginTop: '2px' }}></i>
+                                    <div style={{ flex: 1 }}>
+                                        <p style={{ margin: 0, fontSize: '0.75rem', color: '#1e3a8a', fontWeight: 600, lineHeight: '1.4' }}>
+                                            {liveLocation.address || "Fetching address..."}
+                                        </p>
+                                        <p style={{ margin: '4px 0 0 0', fontSize: '0.65rem', color: '#3b82f6', fontWeight: 500 }}>
+                                            TAP TO FOCUS ON MAP
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {timelineLoading && <p style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>Loading timeline...</p>}
                         {!timelineLoading && timelineEvents.length === 0 && <p style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '0.85rem' }}>No tracking data found for this date.</p>}
 
@@ -623,7 +730,24 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                                     </>
                                                 )}
 
-                                                {/* 4. Unconditionally render playback arrow on top */}
+                                                {/* 4. Live Marker (Pulsing Dot) */}
+                                                {liveLocation?.latitude && window.google && (
+                                                    <Marker
+                                                        position={{ lat: Number(liveLocation.latitude), lng: Number(liveLocation.longitude) }}
+                                                        icon={{
+                                                            path: window.google.maps.SymbolPath.CIRCLE,
+                                                            scale: 8,
+                                                            fillColor: '#3b82f6',
+                                                            fillOpacity: 1,
+                                                            strokeColor: '#ffffff',
+                                                            strokeWeight: 2,
+                                                        }}
+                                                        zIndex={150}
+                                                        title={`Live: ${liveLocation.name}`}
+                                                    />
+                                                )}
+
+                                                {/* 5. Unconditionally render playback arrow on top */}
                                                 {playbackArrow}
                                             </>
                                         );
