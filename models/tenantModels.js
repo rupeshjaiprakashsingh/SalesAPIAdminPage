@@ -11,6 +11,7 @@ const EnquirySchema = require("../models/Enquiry").schema;
 const GeoFenceSchema = require("../models/GeoFence").schema;
 const GeoFenceLogSchema = require("../models/GeoFenceLog").schema;
 const LocationPingSchema = require("../models/LocationPing").schema;
+const SettingsSchema = require("../models/Settings").schema;
 
 // Cache: stores { [tenantId]: { db, models } }
 const tenantCache = {};
@@ -40,6 +41,7 @@ const getTenantModels = (tenantId) => {
     GeoFence: db.model("GeoFence", GeoFenceSchema),
     GeoFenceLog: db.model("GeoFenceLog", GeoFenceLogSchema),
     LocationPing: db.model("LocationPing", LocationPingSchema),
+    Settings: db.model("Settings", SettingsSchema),
   };
 
   tenantCache[tenantId] = { db, models };

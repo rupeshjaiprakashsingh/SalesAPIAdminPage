@@ -45,6 +45,7 @@ app.use("/api/v1/geofence", require("./routes/geofence"));
 app.use("/api/v1/location", require("./routes/location"));
 app.use("/api/v1/tracking", require("./routes/trackingRoutes"));
 app.use("/api/v1/customers", require("./routes/customers"));
+app.use("/api/v1/settings", require("./routes/settings"));
 
 const port = process.env.PORT || 3000;
 

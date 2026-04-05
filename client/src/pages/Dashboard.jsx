@@ -18,6 +18,7 @@ const NAV_ITEMS_ADMIN = [
   { to: "/dashboard/live-tracking", label: "Live Tracking", icon: "ri-map-2-line" },
   { to: "/dashboard/timeline-report", label: "Timeline Report", icon: "ri-time-line" },
   { to: "/dashboard/calendar-report", label: "Calendar Report", icon: "ri-calendar-event-line" },
+  { to: "/dashboard/settings", label: "System Settings", icon: "ri-settings-4-line" },
 ];
 
 const Dashboard = () => {
@@ -206,9 +207,11 @@ const Dashboard = () => {
             <i className="ri-notification-3-line"></i>
             <span className="topbar-badge-dot"></span>
           </button>
-          <button className="topbar-icon-btn" title="Settings">
-            <i className="ri-settings-4-line"></i>
-          </button>
+          <Link to="/dashboard/settings">
+            <button className="topbar-icon-btn" title="Settings">
+              <i className="ri-settings-4-line"></i>
+            </button>
+          </Link>
         </div>
       </header>
 

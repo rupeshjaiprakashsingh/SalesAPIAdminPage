@@ -7,6 +7,7 @@ import "../styles/UserManagement.css";
 
 const UserManagement = () => {
     const [users, setUsers] = useState([]);
+    const [designations, setDesignations] = useState([]);
     const [loading, setLoading] = useState(false);
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
@@ -50,7 +51,21 @@ const UserManagement = () => {
 
     useEffect(() => {
         fetchUsers();
+        fetchDesignations();
     }, [page, search, activeTab]);
+
+    const fetchDesignations = async () => {
+        try {
+            const response = await axios.get("/api/v1/settings/designations", {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (response.data.setting && response.data.setting.data) {
+                setDesignations(response.data.setting.data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch designations", error);
+        }
+    };
 
     const handleTabChange = (tab) => {
         setActiveTab(tab);
@@ -211,7 +226,10 @@ const UserManagement = () => {
                                                 <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#e0e7ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}>
                                                     {user.name.charAt(0).toUpperCase()}
                                                 </div>
-                                                <span style={{ fontWeight: 600, color: '#2563eb' }}>{user.name}</span>
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <span style={{ fontWeight: 600, color: '#2563eb' }}>{user.name}</span>
+                                                    {user.designation && <span style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px' }}>{user.designation}</span>}
+                                                </div>
                                             </div>
                                         </Link>
                                     </td>
@@ -263,9 +281,12 @@ const UserManagement = () => {
                                 <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#f3f4f6', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '14px' }}>
                                     <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 24 24" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"></path></svg>
                                 </div>
-                                <span style={{ fontWeight: 600, color: '#374151', textTransform: 'uppercase', minWidth: '200px', fontSize: '0.85rem' }}>
-                                    {user.name}
-                                </span>
+                                <div style={{ display: 'flex', flexDirection: 'column', minWidth: '200px' }}>
+                                    <span style={{ fontWeight: 600, color: '#374151', textTransform: 'uppercase', fontSize: '0.85rem' }}>
+                                        {user.name}
+                                    </span>
+                                    {user.designation && <span style={{ fontSize: '0.7rem', color: '#6b7280' }}>{user.designation}</span>}
+                                </div>
                                 <span style={{ color: '#9ca3af', fontWeight: 500, fontSize: '0.85rem' }}>
                                     {user.employeeId || "00000000"}
                                 </span>
@@ -341,7 +362,7 @@ const UserManagement = () => {
                                 />
                             </div>
                             <div className="form-group">
-                                <label>Employee ID (Optional)</label>
+                                <label>Employee ID (Auto-generated if left blank)</label>
                                 <input
                                     type="text"
                                     placeholder="e.g. EP-S-081"
@@ -394,6 +415,38 @@ const UserManagement = () => {
                                     }
                                     required
                                 />
+                            </div>
+                            <div className="form-group">
+                                <label>Designation</label>
+                                {designations.length > 0 ? (
+                                    <select
+                                        value={currentUser.designation || ""}
+                                        onChange={(e) =>
+                                            setCurrentUser({ ...currentUser, designation: e.target.value })
+                                        }
+                                        style={{
+                                            width: "100%",
+                                            padding: "10px",
+                                            border: "1px solid #ddd",
+                                            borderRadius: "6px",
+                                            fontSize: "14px",
+                                        }}
+                                    >
+                                        <option value="">Select a Role / Designation</option>
+                                        {designations.map((desi, idx) => (
+                                            <option key={idx} value={desi}>{desi}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <input
+                                        type="text"
+                                        placeholder="Add designations in Settings first, or type manually"
+                                        value={currentUser.designation || ""}
+                                        onChange={(e) =>
+                                            setCurrentUser({ ...currentUser, designation: e.target.value })
+                                        }
+                                    />
+                                )}
                             </div>
                             <div className="form-group">
                                 <label>Role</label>

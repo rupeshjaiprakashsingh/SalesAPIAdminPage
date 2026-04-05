@@ -99,7 +99,7 @@ const getUserById = async (req, res) => {
 const createUser = async (req, res) => {
   try {
     const User = req.models.User;
-    const { name, username, email, password, role, mobileNumber, dateOfBirth, employeeId, isActive } = req.body;
+    let { name, username, email, password, role, mobileNumber, dateOfBirth, employeeId, designation, isActive } = req.body;
     if (!name || !username || !email || !password || !mobileNumber || !dateOfBirth) {
       return res.status(400).json({ msg: "Please provide all fields including username, mobile, and DOB" });
     }
@@ -114,7 +114,16 @@ const createUser = async (req, res) => {
       return res.status(400).json({ msg: "Username already in use" });
     }
 
-    const user = await User.create({ name, username, email, password, mobileNumber, dateOfBirth, role: role || "user", employeeId: employeeId || "", isActive: isActive !== undefined ? isActive : true });
+    if (!employeeId || employeeId.trim() === "") {
+        const usersWithId = await User.find({ employeeId: { $exists: true, $ne: "" } });
+        const maxId = usersWithId.reduce((max, u) => {
+            const num = parseInt(u.employeeId, 10);
+            return (!isNaN(num) && num > max) ? num : max;
+        }, 0);
+        employeeId = String(maxId > 0 ? maxId + 1 : 101).padStart(3, '0');
+    }
+
+    const user = await User.create({ name, username, email, password, mobileNumber, dateOfBirth, role: role || "user", designation: designation || "", employeeId: employeeId, isActive: isActive !== undefined ? isActive : true });
     res.status(201).json({ user });
   } catch (error) {
     if (error.code === 11000) {
@@ -129,7 +138,7 @@ const createUser = async (req, res) => {
 const updateUser = async (req, res) => {
   try {
     const User = req.models.User;
-    const { name, username, email, password, role, mobileNumber, dateOfBirth, employeeId, isActive } = req.body;
+    const { name, username, email, password, role, mobileNumber, dateOfBirth, employeeId, designation, additionalDetails, isActive } = req.body;
     const user = await User.findById(req.params.id);
 
     if (!user) {
@@ -140,10 +149,12 @@ const updateUser = async (req, res) => {
     user.username = username || user.username;
     user.email = email || user.email;
     user.role = role || user.role;
+    if (designation !== undefined) user.designation = designation;
     user.mobileNumber = mobileNumber || user.mobileNumber;
     user.dateOfBirth = dateOfBirth || user.dateOfBirth;
     if (employeeId !== undefined) user.employeeId = employeeId;
     if (isActive !== undefined) user.isActive = isActive;
+    if (additionalDetails !== undefined) user.additionalDetails = additionalDetails;
     if (password) {
       user.password = password; // Will be hashed by pre-save hook
     }
@@ -177,7 +188,7 @@ const { sendEmail } = require("../utils/emailService");
 
 const register = async (req, res) => {
   const User = req.models.User;
-  let { name, username, email, password, role, mobileNumber, dateOfBirth } = req.body;
+  let { name, username, email, password, role, mobileNumber, dateOfBirth, employeeId, designation } = req.body;
 
   if (!name || !username || !email || !password || !mobileNumber || !dateOfBirth) {
     return res.status(400).json({ msg: "Please add all values in the request body" });
@@ -193,12 +204,23 @@ const register = async (req, res) => {
     return res.status(400).json({ msg: "Username already in use" });
   }
 
+  if (!employeeId || employeeId.trim() === "") {
+      const usersWithId = await User.find({ employeeId: { $exists: true, $ne: "" } });
+      const maxId = usersWithId.reduce((max, u) => {
+          const num = parseInt(u.employeeId, 10);
+          return (!isNaN(num) && num > max) ? num : max;
+      }, 0);
+      employeeId = String(maxId > 0 ? maxId + 1 : 101).padStart(3, '0');
+  }
+
   const person = new User({
     name,
     username,
     email,
     password,
     role: role || "user",
+    designation: designation || "",
+    employeeId: employeeId,
     mobileNumber,
     dateOfBirth
   });

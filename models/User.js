@@ -66,6 +66,14 @@ const UserSchema = new mongoose.Schema({
         type: String,
         default: ""
     },
+    designation: {
+        type: String,
+        default: ""
+    },
+    additionalDetails: {
+        type: Object,
+        default: {}
+    },
     isActive: {
         type: Boolean,
         default: true
