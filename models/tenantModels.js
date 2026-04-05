@@ -17,17 +17,18 @@ const tenantCache = {};
 
 /**
  * Returns { db, models } for the given tenantId.
- * Uses mongoose.connection.useDb() which shares the underlying connection pool
- * but targets a different database — zero extra config needed.
+ * Uses mongoose.createConnection(uri) to connect to different MongoDB clusters/accounts.
  */
 const getTenantModels = (tenantId) => {
   if (tenantCache[tenantId]) return tenantCache[tenantId];
 
   const tenant = tenants[tenantId];
-  if (!tenant) throw new Error(`Unknown tenant: ${tenantId}`);
+  if (!tenant || !tenant.uri) {
+    throw new Error(`Unknown tenant or missing URI for: ${tenantId}`);
+  }
 
-  // useDb() piggybacks on the default connection but targets a different DB
-  const db = mongoose.connection.useDb(tenant.dbName, { useCache: true });
+  // createConnection() establishes a new connection pool for this specific cluster
+  const db = mongoose.createConnection(tenant.uri);
 
   const models = {
     User: db.model("User", UserSchema),

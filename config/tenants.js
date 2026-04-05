@@ -1,11 +1,11 @@
 const tenants = {
   scan_services: {
     name: "Scan Services",
-    dbName: "test",
+    uri: process.env.SCAN_SERVICE_MONGO_URI,
   },
   ezzy_products: {
     name: "Ezzy Products",
-    dbName: "SalesAdmin_QA",
+    uri: process.env.EZZY_PRODUCT_MONGO_URI,
   },
 };
 
