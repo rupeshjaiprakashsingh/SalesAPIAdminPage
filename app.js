@@ -17,7 +17,7 @@ const reportRoutes = require("./routes/reports");
 const tenantMiddleware = require("./middleware/tenant");
 
 // Cron Jobs
-const { scheduleDailyReport, scheduleKeepAlive } = require("./utils/cronJobs");
+const { scheduleDailyReport, scheduleKeepAlive, schedulePhotoCleanup, deleteOldPhotos } = require("./utils/cronJobs");
 
 // Middlewares
 app.use(express.json({ limit: "50mb" }));
@@ -34,6 +34,16 @@ app.get("/api/v1/health", (req, res) => {
 });
 app.get("/ping", (req, res) => {
   res.status(200).send("ok");
+});
+
+// External Cron entry point for cleaning photos (bypasses tenant middleware so it handles all tenants)
+app.get("/api/v1/cleanup-photos", async (req, res) => {
+  const result = await deleteOldPhotos();
+  if (result.success) {
+    res.status(200).json(result);
+  } else {
+    res.status(500).json(result);
+  }
 });
 
 // Apply tenant middleware to ALL /api/v1 routes
@@ -63,6 +73,7 @@ const start = async () => {
       // Start cron jobs
       scheduleDailyReport();
       scheduleKeepAlive();
+      schedulePhotoCleanup();
     });
   } catch (error) {
     console.log(error);

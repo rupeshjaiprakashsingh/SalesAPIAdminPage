@@ -142,5 +142,45 @@ const scheduleKeepAlive = () => {
     console.log("Keep-alive cron job scheduled for every 10 minutes");
 };
 
+const deleteOldPhotos = async () => {
+    try {
+        console.log("Running auto-cleanup of old attendance photos (older than 90 days)...");
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        
+        let cleanupReport = [];
+
+        for (const [tenantId, tenant] of Object.entries(tenants)) {
+            const { models } = getTenantModels(tenantId);
+            const { Attendance } = models;
+
+            // Unset photoUrl (Base64 string) to free up MongoDB space
+            const result = await Attendance.updateMany(
+                {
+                    deviceTime: { $lt: ninetyDaysAgo },
+                    photoUrl: { $exists: true, $ne: null, $ne: "" }
+                },
+                {
+                    $unset: { photoUrl: 1 }
+                }
+            );
+            console.log(`[${tenant.name}] Cleaned up ${result.modifiedCount} old attendance photos.`);
+            cleanupReport.push({ tenant: tenant.name, cleaned: result.modifiedCount });
+        }
+        return { success: true, message: "Photo cleanup executed.", report: cleanupReport };
+    } catch (e) {
+        console.error("Auto-cleanup photo cron error:", e);
+        return { success: false, error: e.message };
+    }
+};
+
+const schedulePhotoCleanup = () => {
+    // Run once a day at 2:00 AM
+    cron.schedule("0 2 * * *", async () => {
+        await deleteOldPhotos();
+    });
+    console.log("Photo auto-cleanup cron job scheduled for 2:00 AM every day");
+};
+
 // Export the function to be called from app.js
-module.exports = { scheduleDailyReport, generateAndSendDailyReport, scheduleKeepAlive };
+module.exports = { scheduleDailyReport, generateAndSendDailyReport, scheduleKeepAlive, schedulePhotoCleanup, deleteOldPhotos };

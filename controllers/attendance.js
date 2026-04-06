@@ -288,24 +288,8 @@ exports.markAttendance = async (req, res) => {
     // Process photo payload
     let photoUrl = undefined;
     if (photoBase64) {
-      try {
-        const fs = require("fs");
-        const path = require("path");
-        const uploadDir = path.join(__dirname, "../uploads");
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir);
-        }
-        
-        // Handle metadata prefix if exists (e.g. "data:image/jpeg;base64,")
-        const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, "");
-        const fileName = `attendance_photo_${userId}_${Date.now()}.jpg`;
-        const filePath = path.join(uploadDir, fileName);
-        
-        fs.writeFileSync(filePath, base64Data, 'base64');
-        photoUrl = `/uploads/${fileName}`;
-      } catch (err) {
-        console.error("[Attendance Photo Save Error]: ", err);
-      }
+      // Save Base64 directly to MongoDB to avoid ephemeral disk wipes on Render hosting
+      photoUrl = photoBase64;
     }
 
     // Create Attendance Entry
