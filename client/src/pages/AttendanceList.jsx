@@ -538,6 +538,15 @@ export default function AttendanceList() {
                            <input type="checkbox" checked={selectedIds.includes(rowKey)} onChange={(e) => handleSelectOne(e, rowKey)} style={{ width: '16px', height: '16px', accentColor: '#2563eb', cursor: 'pointer' }} />
                         </div>
                      )}
+                     <div style={{ width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', background: '#e5e7eb', flexShrink: 0, marginTop: '2px' }}>
+                        {(r.inRecord?.photoUrl || r.outRecord?.photoUrl) ? (
+                            <img src={r.inRecord?.photoUrl || r.outRecord?.photoUrl} alt="Capture" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                                <i className="ri-user-smile-line" style={{ fontSize: '24px', color: '#9ca3af' }}></i>
+                            </div>
+                        )}
+                     </div>
                      <div>
                         <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '8px', textTransform: 'uppercase' }}>
                            {userRole === "admin" ? (

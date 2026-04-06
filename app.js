@@ -20,8 +20,13 @@ const tenantMiddleware = require("./middleware/tenant");
 const { scheduleDailyReport, scheduleKeepAlive } = require("./utils/cronJobs");
 
 // Middlewares
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cors());
+
+// Serve uploads
+const path = require("path");
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Keep-alive / health check (for external ping every ~14 min to prevent Render sleep)
 app.get("/api/v1/health", (req, res) => {

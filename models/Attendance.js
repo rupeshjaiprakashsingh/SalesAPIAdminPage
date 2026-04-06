@@ -21,6 +21,7 @@ const attendanceSchema = new mongoose.Schema({
 
   validatedInsideGeoFence: { type: Boolean, default: false },
   ipAddress: { type: String },
+  photoUrl: { type: String },
 
   workingHours: { type: Number }, // In hours (e.g., 7.5)
   status: {
