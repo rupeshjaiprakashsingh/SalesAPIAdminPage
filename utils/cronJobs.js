@@ -174,6 +174,53 @@ const deleteOldPhotos = async () => {
     }
 };
 
+const cleanupLocationLogs = async () => {
+    try {
+        console.log("Evaluating EmployeeLocationLogs for 80% storage threshold...");
+        let cleanupReport = [];
+
+        for (const [tenantId, tenant] of Object.entries(tenants)) {
+            const { db, models } = getTenantModels(tenantId);
+            const { EmployeeLocationLog } = models;
+
+            // Get DB stats using the native MongoDB driver to check disk usage
+            const stats = await db.db.command({ dbStats: 1 });
+            const totalStorageBytes = (stats.storageSize || 0) + (stats.indexSize || 0);
+            const thresholdBytes = 400 * 1024 * 1024; // 400MB (80% of 500MB limit)
+
+            if (totalStorageBytes > thresholdBytes) {
+                console.log(`[${tenant.name}] Storage > 80% (${Math.round(totalStorageBytes/1024/1024)}MB). Pruning old location logs.`);
+                
+                // Delete logs older than 60 days to free up space (keeping recent logs intact for live tracking)
+                const sixtyDaysAgo = new Date();
+                sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+                
+                const result = await EmployeeLocationLog.deleteMany({
+                    timestamp: { $lt: sixtyDaysAgo }
+                });
+
+                cleanupReport.push({ 
+                    tenant: tenant.name, 
+                    cleared: true,
+                    storageMB: Math.round(totalStorageBytes / (1024 * 1024)),
+                    deletedCount: result.deletedCount 
+                });
+            } else {
+                cleanupReport.push({ 
+                    tenant: tenant.name, 
+                    cleared: false,
+                    storageMB: Math.round(totalStorageBytes / (1024 * 1024)),
+                    message: "Storage under 80% limit, skipped."
+                });
+            }
+        }
+        return { success: true, message: "Location logs cleanup evaluated.", report: cleanupReport };
+    } catch (e) {
+        console.error("Location logs cleanup cron error:", e);
+        return { success: false, error: e.message };
+    }
+};
+
 const schedulePhotoCleanup = () => {
     // Run once a day at 2:00 AM
     cron.schedule("0 2 * * *", async () => {
@@ -183,4 +230,4 @@ const schedulePhotoCleanup = () => {
 };
 
 // Export the function to be called from app.js
-module.exports = { scheduleDailyReport, generateAndSendDailyReport, scheduleKeepAlive, schedulePhotoCleanup, deleteOldPhotos };
+module.exports = { scheduleDailyReport, generateAndSendDailyReport, scheduleKeepAlive, schedulePhotoCleanup, deleteOldPhotos, cleanupLocationLogs };
