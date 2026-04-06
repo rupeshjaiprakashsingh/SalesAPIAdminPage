@@ -14,3 +14,4 @@ export { default as CustomersDashboard } from "./CustomersDashboard";
 export { default as AddCustomer } from "./AddCustomer";
 export { default as StaffProfile } from "./StaffProfile";
 export { default as Settings } from "./Settings";
+export { default as AttendanceApproval } from "./AttendanceApproval";

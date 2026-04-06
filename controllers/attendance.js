@@ -309,7 +309,8 @@ exports.markAttendance = async (req, res) => {
       validatedInsideGeoFence: insideFence,
       photoUrl,
       workingHours: attendanceType === "OUT" ? workingHours : undefined,
-      status: attendanceType === "OUT" ? status : "Present",
+      status: "Pending", // Default to Pending for Review workflow
+      approvalStatus: "Pending"
     });
 
     await record.save();
@@ -823,6 +824,43 @@ exports.getMonthlyAttendanceUser = async (req, res) => {
     });
   } catch (err) {
     console.error("Monthly attendance error", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Admin Approve/Reject Attendance
+exports.approveAttendance = async (req, res) => {
+  try {
+    const { Attendance } = req.models;
+    const { ids, approvalStatus, remarks } = req.body;
+
+    if (!ids || !Array.isArray(ids)) {
+      return res.status(400).json({ message: "Attendance IDs (array) are required" });
+    }
+
+    if (!["Approved", "Rejected"].includes(approvalStatus)) {
+      return res.status(400).json({ message: "Invalid approval status" });
+    }
+
+    const updatePayload = {
+      approvalStatus,
+      status: approvalStatus === "Approved" ? "Present" : "Rejected",
+      approvedBy: req.user.id,
+      approvalDate: new Date(),
+      remarks: remarks || `Status set to ${approvalStatus} by admin`
+    };
+
+    const result = await Attendance.updateMany(
+      { _id: { $in: ids } },
+      { $set: updatePayload }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully ${approvalStatus.toLowerCase()} ${result.modifiedCount} records`,
+      modifiedCount: result.modifiedCount
+    });
+  } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };

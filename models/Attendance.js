@@ -26,9 +26,16 @@ const attendanceSchema = new mongoose.Schema({
   workingHours: { type: Number }, // In hours (e.g., 7.5)
   status: {
     type: String,
-    enum: ["Present", "Half Day", "Absent", "Full Day"],
-    default: "Present"
+    enum: ["Present", "Half Day", "Absent", "Full Day", "Pending", "Rejected"],
+    default: "Pending" // Default to Pending for new mobile punches
   },
+  approvalStatus: { 
+    type: String, 
+    enum: ["Pending", "Approved", "Rejected"], 
+    default: "Pending" 
+  },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  approvalDate: { type: Date },
 
 }, { timestamps: true });
 

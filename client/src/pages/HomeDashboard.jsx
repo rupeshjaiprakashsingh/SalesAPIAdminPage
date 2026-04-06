@@ -245,6 +245,26 @@ function AdminDashboard({ stats: initialStats, trend, recentActivity, navigate, 
             </div>
             
             <div className="am-controls">
+              {s.pendingApprovals > 0 && (
+                <div style={{ 
+                  display: 'flex', alignItems: 'center', gap: '12px', background: '#fff1f2', 
+                  padding: '6px 12px', borderRadius: '30px', border: '1px solid #fecaca',
+                  marginRight: '12px'
+                }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', animation: 'pulse 2s infinite' }}></div>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#991b1b' }}>Total Pending for Approval: {s.pendingApprovals}</span>
+                  <button 
+                    onClick={() => navigate('/dashboard/attendance/approval')}
+                    style={{ 
+                      background: '#2563eb', color: 'white', border: 'none', padding: '4px 14px', 
+                      borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                      boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
+                    }}
+                  >
+                    Review
+                  </button>
+                </div>
+              )}
               <div className="am-date-picker">
                 <i className="ri-arrow-left-s-line" onClick={() => changeDate(-1)}></i>
                 <span>{formattedSelectedDate}</span>
@@ -258,7 +278,7 @@ function AdminDashboard({ stats: initialStats, trend, recentActivity, navigate, 
           <div className="am-grid">
             <div className="am-item">
               <div className="am-label">Present <i className="ri-information-line"></i></div>
-              <div className="am-value">{s.present || 0}</div>
+              <div className="am-value">{s.present || 0}{s.pendingApprovals > 0 && <span style={{ color: '#2563eb', fontSize: '0.8rem', marginLeft: '4px' }}>(+{s.pendingApprovals})</span>}</div>
             </div>
             <div className="am-item">
               <div className="am-label">Absent <i className="ri-information-line"></i></div>

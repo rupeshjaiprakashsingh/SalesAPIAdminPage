@@ -19,7 +19,8 @@ exports.getAdminStats = async (req, res) => {
             {
                 $match: {
                     deviceTime: { $gte: targetDate, $lt: nextDay },
-                    attendanceType: "IN"
+                    attendanceType: "IN",
+                    $or: [{ approvalStatus: "Approved" }, { status: "Present" }]
                 }
             },
             { $group: { _id: "$userId" } },
@@ -39,6 +40,12 @@ exports.getAdminStats = async (req, res) => {
             { $count: "punchedOut" }
         ]);
         const punchedOut = todayOuts[0]?.punchedOut || 0;
+        
+        // Count pending approvals
+        const pendingApprovals = await Attendance.countDocuments({
+            deviceTime: { $gte: targetDate, $lt: nextDay },
+            approvalStatus: "Pending"
+        });
 
         const absentToday = totalUsers - presentToday > 0 ? totalUsers - presentToday : 0;
 
@@ -67,7 +74,8 @@ exports.getAdminStats = async (req, res) => {
                 overtimeHours,
                 fineHours,
                 deactivated,
-                dailyWorkEntries
+                dailyWorkEntries,
+                pendingApprovals
             }
         });
     } catch (error) {
@@ -179,7 +187,8 @@ exports.getAttendanceTrend = async (req, res) => {
             {
                 $match: {
                     deviceTime: { $gte: startDate, $lte: endDate },
-                    attendanceType: "IN"
+                    attendanceType: "IN",
+                    $or: [{ approvalStatus: "Approved" }, { status: "Present" }]
                 }
             },
             {
