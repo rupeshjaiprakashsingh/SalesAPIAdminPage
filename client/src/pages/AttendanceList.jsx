@@ -66,9 +66,12 @@ export default function AttendanceList() {
     }
   }, [token]);
 
-  // Edit Modal State
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
+
+  // Log Modal State
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [selectedLogRecord, setSelectedLogRecord] = useState(null);
 
   // API CALL
   const fetchRecords = async (p = page, l = limit) => {
@@ -401,6 +404,124 @@ export default function AttendanceList() {
     }
   };
 
+  const handleOpenLogs = (record) => {
+    setSelectedLogRecord(record);
+    setShowLogModal(true);
+  };
+
+  const renderLogModal = () => {
+    if (!showLogModal || !selectedLogRecord) return null;
+    const r = selectedLogRecord;
+    
+    // Format date like "06 Apr | Mon"
+    const dateObj = new Date(r.dateStr);
+    const dayName = dateObj.toLocaleDateString("en-IN", { weekday: "short" });
+    const formattedDate = dateObj.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) + " | " + dayName;
+
+    // Timeline Events
+    const events = [];
+
+    // 1. Approved / Admin Added Event
+    if (r.inRecord && (r.inRecord.remarks?.includes("Admin") || r.inRecord.deviceId?.includes("admin"))) {
+        events.push({
+            title: "Approved Punch-In Time",
+            detail: `By Admin on ${formattedDate}, ${new Date(r.inRecord.deviceTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+            type: "approved"
+        });
+    }
+
+    // 2. Punched In Event
+    if (r.inRecord) {
+        events.push({
+            title: `Punched In | ${r.inRecord.status || 'Regular'} | ${r.inRecord.address || "Location Captured"}`,
+            detail: `By ${r.userDetails?.name || 'Staff'} on ${formattedDate}, ${new Date(r.inRecord.deviceTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+            photoUrl: r.inRecord.photoUrl,
+            type: "punch"
+        });
+    }
+
+    // 3. Punched Out Event
+    if (r.outRecord) {
+        events.push({
+            title: `Punched Out | ${r.outRecord.status || 'Regular'} | ${r.outRecord.address || "Location Captured"}`,
+            detail: `By ${r.userDetails?.name || 'Staff'} on ${formattedDate}, ${new Date(r.outRecord.deviceTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+            photoUrl: r.outRecord.photoUrl,
+            type: "punch"
+        });
+    }
+
+    return (
+      <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} onClick={() => setShowLogModal(false)}>
+        <div 
+          className="modal-content" 
+          onClick={(e) => e.stopPropagation()} 
+          style={{ width: '450px', padding: '24px', borderRadius: '16px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.1)', overflow: 'visible' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+            <div>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 4px 0', color: '#111827', textTransform: 'uppercase' }}>{r.userDetails?.name}</h2>
+              <p style={{ margin: 0, fontSize: '14px', color: '#6b7280', fontWeight: 500 }}>{formattedDate}</p>
+            </div>
+            <button 
+              onClick={() => setShowLogModal(false)}
+              style={{ background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', color: '#6b7280' }}
+            >
+              <i className="ri-close-line" style={{ fontSize: '20px' }}></i>
+            </button>
+          </div>
+
+          <div style={{ padding: '0 4px', maxHeight: '60vh', overflowY: 'auto' }}>
+            {events.length === 0 ? (
+               <div style={{ padding: '20px', textAlign: 'center', color: '#9ca3af' }}>No detailed logs available for this day.</div>
+            ) : (
+                <div style={{ position: 'relative' }}>
+                    {/* Vertical Line */}
+                    <div style={{ position: 'absolute', left: '4px', top: '8px', bottom: '8px', width: '2px', background: '#e5e7eb' }}></div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                        {events.map((ev, idx) => (
+                            <div key={idx} style={{ position: 'relative', paddingLeft: '30px' }}>
+                                {/* Dot */}
+                                <div style={{ 
+                                    position: 'absolute', left: '-1px', top: '6px', width: '12px', height: '12px', 
+                                    borderRadius: '50%', background: ev.type === 'approved' ? '#6b7280' : '#4b5563', 
+                                    border: '2px solid white', boxShadow: '0 0 0 1px #e5e7eb' 
+                                }}></div>
+                                
+                                <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 700, color: '#374151', lineHeight: 1.4 }}>{ev.title}</h4>
+                                <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#6b7280', fontWeight: 500 }}>{ev.detail}</p>
+                                
+                                {ev.photoUrl && (
+                                    <div style={{ marginTop: '4px' }}>
+                                        <img 
+                                          src={ev.photoUrl} 
+                                          alt="Attendance" 
+                                          style={{ width: '120px', height: '160px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e5e7eb' }} 
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: '30px' }}>
+            <button 
+              onClick={() => setShowLogModal(false)}
+              style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #2563eb', background: 'white', color: '#2563eb', fontWeight: 700, fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}
+              onMouseOver={(e) => { e.currentTarget.style.background = '#eff6ff' }}
+              onMouseOut={(e) => { e.currentTarget.style.background = 'white' }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
 
   const statTotalStaff = users.length;
 
@@ -565,7 +686,7 @@ export default function AttendanceList() {
                            1 Shift (s) <i className="ri-information-line"></i>
                         </div>
                         <div style={{ fontSize: '13px', color: '#2563eb', fontWeight: 600, display: 'flex', gap: '10px' }}>
-                           <span style={{ cursor: 'pointer' }} onClick={() => handleEdit(r)}>Add Note - Logs (Edit)</span>
+                           <span style={{ cursor: 'pointer' }} onClick={() => handleOpenLogs(r)}>Add Note - Logs</span>
                            {userRole === "admin" && (
                               <span style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => handleDelete(r)}>Delete</span>
                            )}
@@ -955,6 +1076,7 @@ export default function AttendanceList() {
           </div>
         </div>
       )}
+      {renderLogModal()}
     </div >
 
   );
