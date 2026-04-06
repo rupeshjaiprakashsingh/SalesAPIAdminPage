@@ -430,22 +430,22 @@ export default function AttendanceList() {
         });
     }
 
-    // 2. Punched In Event
-    if (r.inRecord) {
-        events.push({
-            title: `Punched In | ${r.inRecord.status || 'Regular'} | ${r.inRecord.address || "Location Captured"}`,
-            detail: `By ${r.userDetails?.name || 'Staff'} on ${formattedDate}, ${new Date(r.inRecord.deviceTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
-            photoUrl: r.inRecord.photoUrl,
-            type: "punch"
-        });
-    }
-
-    // 3. Punched Out Event
+    // 2. Punched Out Event
     if (r.outRecord) {
         events.push({
             title: `Punched Out | ${r.outRecord.status || 'Regular'} | ${r.outRecord.address || "Location Captured"}`,
             detail: `By ${r.userDetails?.name || 'Staff'} on ${formattedDate}, ${new Date(r.outRecord.deviceTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
             photoUrl: r.outRecord.photoUrl,
+            type: "punch"
+        });
+    }
+
+    // 3. Punched In Event
+    if (r.inRecord) {
+        events.push({
+            title: `Punched In | ${r.inRecord.status || 'Regular'} | ${r.inRecord.address || "Location Captured"}`,
+            detail: `By ${r.userDetails?.name || 'Staff'} on ${formattedDate}, ${new Date(r.inRecord.deviceTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+            photoUrl: r.inRecord.photoUrl,
             type: "punch"
         });
     }
@@ -492,11 +492,11 @@ export default function AttendanceList() {
                                 <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#6b7280', fontWeight: 500 }}>{ev.detail}</p>
                                 
                                 {ev.photoUrl && (
-                                    <div style={{ marginTop: '4px' }}>
+                                    <div style={{ marginTop: '8px' }}>
                                         <img 
                                           src={ev.photoUrl.startsWith('/') ? `${axios.defaults.baseURL || ''}${ev.photoUrl}` : ev.photoUrl} 
                                           alt="Attendance" 
-                                          style={{ width: '120px', height: '160px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e5e7eb' }} 
+                                          style={{ width: '140px', height: '180px', objectFit: 'cover', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }} 
                                         />
                                     </div>
                                 )}
