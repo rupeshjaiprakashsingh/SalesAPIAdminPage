@@ -494,7 +494,7 @@ export default function AttendanceList() {
                                 {ev.photoUrl && (
                                     <div style={{ marginTop: '4px' }}>
                                         <img 
-                                          src={ev.photoUrl} 
+                                          src={ev.photoUrl.startsWith('/') ? `${axios.defaults.baseURL || ''}${ev.photoUrl}` : ev.photoUrl} 
                                           alt="Attendance" 
                                           style={{ width: '120px', height: '160px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e5e7eb' }} 
                                         />
