@@ -245,26 +245,36 @@ function AdminDashboard({ stats: initialStats, trend, recentActivity, navigate, 
             </div>
             
             <div className="am-controls">
-              {s.pendingApprovals > 0 && (
-                <div style={{ 
-                  display: 'flex', alignItems: 'center', gap: '12px', background: '#fff1f2', 
-                  padding: '6px 12px', borderRadius: '30px', border: '1px solid #fecaca',
+              <div style={{
+                  display: 'flex', alignItems: 'center', gap: '12px', 
+                  background: s.pendingApprovals > 0 ? '#fff1f2' : '#f0fdf4', 
+                  padding: '6px 12px', borderRadius: '30px', 
+                  border: `1px solid ${s.pendingApprovals > 0 ? '#fecaca' : '#bbf7d0'}`,
                   marginRight: '12px'
-                }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', animation: 'pulse 2s infinite' }}></div>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#991b1b' }}>Total Pending for Approval: {s.pendingApprovals}</span>
-                  <button 
-                    onClick={() => navigate('/dashboard/attendance/approval')}
-                    style={{ 
-                      background: '#2563eb', color: 'white', border: 'none', padding: '4px 14px', 
-                      borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                      boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
-                    }}
-                  >
-                    Review
-                  </button>
-                </div>
-              )}
+              }}>
+                {s.pendingApprovals > 0 ? (
+                  <>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', animation: 'pulse 2s infinite' }}></div>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#991b1b' }}>Total Pending: {s.pendingApprovals}</span>
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-check-double-line" style={{ color: '#16a34a' }}></i>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#166534' }}>All Approved</span>
+                  </>
+                )}
+                <button 
+                  onClick={() => navigate('/dashboard/attendance/approval')}
+                  style={{ 
+                    background: s.pendingApprovals > 0 ? '#2563eb' : '#475569', 
+                    color: 'white', border: 'none', padding: '4px 14px', 
+                    borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                    boxShadow: '0 2px 4px rgba(0,0,0, 0.1)'
+                  }}
+                >
+                  {s.pendingApprovals > 0 ? 'Approve' : 'Review'}
+                </button>
+              </div>
               <div className="am-date-picker">
                 <i className="ri-arrow-left-s-line" onClick={() => changeDate(-1)}></i>
                 <span>{formattedSelectedDate}</span>

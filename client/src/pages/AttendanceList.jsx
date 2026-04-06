@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
 import "../styles/AttendanceList.css";
 
 export default function AttendanceList() {
+  const navigate = useNavigate();
   const [records, setRecords] = useState([]);
   const [showPresentModal, setShowPresentModal] = useState(false);
   const [presentEditData, setPresentEditData] = useState({
@@ -19,6 +20,8 @@ export default function AttendanceList() {
 
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
+
+  const [serverPendingCount, setServerPendingCount] = useState(0);
 
   // pagination states
   const [page, setPage] = useState(1);
@@ -118,8 +121,23 @@ export default function AttendanceList() {
   // Load and reload on date change
   useEffect(() => {
     fetchRecords(1, limit);
+    if (userRole === "admin") {
+      fetchUsers();
+      fetchRealPendingCount(startDate);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate]);
+  }, [startDate, endDate, userRole, token]);
+
+  const fetchRealPendingCount = async (dateParam) => {
+    try {
+      const res = await axios.get(`/api/v1/dashboard/admin-stats?date=${dateParam}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setServerPendingCount(res.data.stats?.pendingApprovals || 0);
+    } catch (err) {
+      console.error("Failed to fetch server pending count");
+    }
+  };
 
   useEffect(() => {
      fetchUsers();
@@ -530,6 +548,8 @@ export default function AttendanceList() {
   const statHalfDayCount = filtered.filter(f => { const s = f.outRecord?.status || f.inRecord?.status; return s === "Half Day"; }).length;
   const statInCount = filtered.filter(f => f.inRecord).length;
   const statOutCount = filtered.filter(f => f.outRecord).length;
+  // Use the server-validated pending count to align perfectly with HomeDashboard logic
+  const statPendingCount = serverPendingCount;
 
   return (
     <div className="attendance-list-page" style={{ padding: '0px', background: '#f9fafb', height: '100%', flex: 1, overflowY: 'auto', fontFamily: 'Inter, sans-serif' }}>
@@ -558,9 +578,34 @@ export default function AttendanceList() {
             <i className="ri-calendar-line" style={{ color: '#9ca3af', marginLeft: '5px' }}></i>
             <i className="ri-arrow-right-s-line" style={{ cursor: 'pointer', fontSize: '16px' }} onClick={() => handleDateChange(1)}></i>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#6b7280' }}><span style={{ color: '#ef4444' }}>●</span> Total Pending for Approval : 0</span>
-            <button style={{ background: '#2563eb', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}>Review</button>
+          <div style={{
+              display: 'flex', alignItems: 'center', gap: '12px', 
+              background: statPendingCount > 0 ? '#fff1f2' : '#f0fdf4', 
+              padding: '6px 12px', borderRadius: '30px', 
+              border: `1px solid ${statPendingCount > 0 ? '#fecaca' : '#bbf7d0'}`,
+          }}>
+            {statPendingCount > 0 ? (
+              <>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', animation: 'pulse 2s infinite' }}></div>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#991b1b' }}>Total Pending: {statPendingCount}</span>
+              </>
+            ) : (
+              <>
+                <i className="ri-check-double-line" style={{ color: '#16a34a' }}></i>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#166534' }}>All Approved</span>
+              </>
+            )}
+            <button 
+              onClick={() => navigate('/dashboard/attendance/approval')}
+              style={{ 
+                background: statPendingCount > 0 ? '#2563eb' : '#475569', 
+                color: 'white', border: 'none', padding: '4px 14px', 
+                borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(0,0,0, 0.1)'
+              }}
+            >
+              {statPendingCount > 0 ? 'Approve' : 'Review'}
+            </button>
           </div>
           <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setEndDate(e.target.value); }} style={{ opacity: 0, position: 'absolute', pointerEvents: 'none' }} />
         </div>
@@ -568,7 +613,13 @@ export default function AttendanceList() {
         {/* Stats Row */}
         <div style={{ display: 'flex', gap: '40px', overflowX: 'auto', paddingBottom: '20px', whiteSpace: 'nowrap', borderBottom: '1px solid #e5e7eb', marginBottom: '20px' }}>
           <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Total Staff <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statTotalStaff}</div></div>
-          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Present <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statPresentCount}</div></div>
+          <div>
+            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Present <i className="ri-information-line"></i></div>
+            <div style={{ fontSize: '18px', fontWeight: 700 }}>
+              {statPresentCount}
+              {statPendingCount > 0 && <span style={{ color: '#2563eb', fontSize: '0.8rem', marginLeft: '4px' }}>(+{statPendingCount})</span>}
+            </div>
+          </div>
           <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Absent <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statAbsentCount}</div></div>
           <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Half Day <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statHalfDayCount}</div></div>
           <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Overtime Hours <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>0h 0m</div></div>

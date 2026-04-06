@@ -1,6 +1,8 @@
 // Models now come from req.models (tenant-specific)
 // const Attendance and User removed
 const { isInsideGeofence } = require("../utils/geoFence");
+const { sendEmail } = require("../utils/emailService");
+const { sendPushNotification } = require("../utils/notificationService");
 
 // =========================================================
 // ADMIN MANUAL ADD ATTENDANCE
@@ -842,13 +844,57 @@ exports.approveAttendance = async (req, res) => {
       return res.status(400).json({ message: "Invalid approval status" });
     }
 
+    const targetStatus = approvalStatus === "Approved" ? "Present" : "Absent";
+
     const updatePayload = {
       approvalStatus,
-      status: approvalStatus === "Approved" ? "Present" : "Rejected",
+      status: targetStatus,
       approvedBy: req.user.id,
       approvalDate: new Date(),
       remarks: remarks || `Status set to ${approvalStatus} by admin`
     };
+
+    // Find records before updating to send notifications
+    const recordsToUpdate = await Attendance.find({ _id: { $in: ids } }).populate("userId", "name email fcmToken");
+    
+    // Group by user to avoid duplicate notifications
+    const notifiedUsers = new Set();
+
+    for (const record of recordsToUpdate) {
+        const user = record.userId;
+        if (!user) continue;
+
+        if (!notifiedUsers.has(user._id.toString())) {
+            notifiedUsers.add(user._id.toString());
+
+            const title = `Attendance ${approvalStatus}`;
+            const body = `Your attendance for ${new Date(record.deviceTime).toLocaleDateString()} has been ${approvalStatus.toLowerCase()}.`;
+
+            // Push Notification
+            if (user.fcmToken) {
+                sendPushNotification(user.fcmToken, title, body, {
+                    type: "ATTENDANCE_APPROVAL",
+                    status: approvalStatus
+                });
+            }
+
+            // Email Notification
+            if (user.email) {
+                const emailHtml = `
+                <div style="font-family: Arial, sans-serif; padding: 20px; background: #f9fafb;">
+                   <div style="max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; border-top: 4px solid ${approvalStatus === 'Approved' ? '#2563eb' : '#ef4444'}; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                      <h2 style="color: #111827; margin-top: 0;">Attendance ${approvalStatus}</h2>
+                      <p style="color: #4b5563; font-size: 15px;">Hello <b>${user.name}</b>,</p>
+                      <p style="color: #4b5563; font-size: 15px;">Your attendance record on <b>${new Date(record.deviceTime).toLocaleDateString()}</b> has been <strong>${approvalStatus.toLowerCase()}</strong> by the administrator.</p>
+                      ${remarks ? `<div style="background: #f3f4f6; padding: 12px; border-radius: 6px; margin: 20px 0;"><p style="margin:0; color:#374151; font-size:14px;"><b>Remarks:</b> ${remarks}</p></div>` : ''}
+                      <p style="margin-top: 30px; color: #6b7280; font-size: 13px; border-top: 1px solid #e5e7eb; padding-top: 15px;">You can view the full details in your mobile app.</p>
+                   </div>
+                </div>
+                `;
+                sendEmail(user.email, title, emailHtml);
+            }
+        }
+    }
 
     const result = await Attendance.updateMany(
       { _id: { $in: ids } },
@@ -861,6 +907,7 @@ exports.approveAttendance = async (req, res) => {
       modifiedCount: result.modifiedCount
     });
   } catch (err) {
+    console.error("Approve Attendance Error:", err);
     res.status(500).json({ message: err.message });
   }
 };
