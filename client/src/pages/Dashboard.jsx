@@ -45,18 +45,13 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      await axios.get("/api/v1/dashboard", {
+      const response = await axios.get("/api/v1/users/profile", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (token) {
-        try {
-          const payload = JSON.parse(atob(token.split(".")[1]));
-          setRole(payload.role || "user");
-          setUserName(payload.name || payload.username || "Staff");
-        } catch (e) {
-          console.error("Error decoding token", e);
-        }
+      if (response && response.data) {
+        setRole(response.data.role || "user");
+        setUserName(response.data.name || response.data.username || "Staff");
       }
     } catch (error) {
       toast.error(error.message);
