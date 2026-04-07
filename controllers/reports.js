@@ -637,14 +637,14 @@ exports.getTimelineReport = async (req, res) => {
         let previousLog = logs[0];
 
         // Thresholds
-        const DISTANCE_THRESHOLD = 5; // meters (to consider motion, reduced from 20 for accuracy)
+        const DISTANCE_THRESHOLD = 5; // meters (to consider motion)
         const TIME_THRESHOLD_IDLE = 5 * 60 * 1000; // 5 minutes in ms
-        const ACCURACY_THRESHOLD = 100; // meters — broadened to include city-env tracking
-        const JITTER_THRESHOLD = 10;   // meters — minimum meaningful movement
+        const ACCURACY_THRESHOLD = 60; // meters — filter out extremely bad GPS jumps
+        const JITTER_THRESHOLD = 15;   // meters — minimum meaningful movement
 
         // ─── STEP 1: Filter out noisy GPS fixes ─────────────────────────
         const cleanLogs = logs.filter(log => {
-            // Remove points with very poor accuracy
+            // Remove points with poor accuracy (high uncertainty)
             if (log.accuracy && log.accuracy > ACCURACY_THRESHOLD) return false;
             // Remove invalid coordinates
             if (!log.latitude || !log.longitude) return false;
@@ -664,18 +664,31 @@ exports.getTimelineReport = async (req, res) => {
 
         // ─── STEP 2: Remove stationary jitter (dedup nearby points) ─────
         const dedupedLogs = [cleanLogs[0]];
-        for (let i = 1; i < cleanLogs.length; i++) {
-            const prev = dedupedLogs[dedupedLogs.length - 1];
-            const curr = cleanLogs[i];
-            const dist = calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
-            const elapsed = new Date(curr.timestamp) - new Date(prev.timestamp);
+        let spatialAnchor = cleanLogs[0]; // Anchor point to prevent time-based GPS drift
 
-            // Keep point if: moved enough OR enough time has passed (heartbeat)
-            if (dist >= JITTER_THRESHOLD || elapsed >= 5 * 60 * 1000) {
+        for (let i = 1; i < cleanLogs.length; i++) {
+            const curr = cleanLogs[i];
+            const lastLog = dedupedLogs[dedupedLogs.length - 1];
+            const distFromAnchor = calculateDistance(spatialAnchor.latitude, spatialAnchor.longitude, curr.latitude, curr.longitude);
+            const elapsed = new Date(curr.timestamp) - new Date(lastLog.timestamp);
+
+            // Keep point if it strictly broke the spatial jitter threshold
+            if (distFromAnchor >= JITTER_THRESHOLD) {
                 dedupedLogs.push(curr);
+                spatialAnchor = curr; // update anchor since they clearly moved
+            } 
+            // If they haven't moved but time has passed, log a heartbeat to prove device is alive
+            // IMPORTANT: Overwrite coordinates with the anchor's coordinates to completely nullify drift distance additions.
+            else if (elapsed >= TIME_THRESHOLD_IDLE) {
+                dedupedLogs.push({ 
+                    ...curr, 
+                    latitude: spatialAnchor.latitude, 
+                    longitude: spatialAnchor.longitude 
+                });
             }
         }
-        // Always include the last point for accurate timeline end
+        
+        // Always include the last point for accurate timeline end (clamped if needed)
         if (dedupedLogs[dedupedLogs.length - 1] !== cleanLogs[cleanLogs.length - 1]) {
             dedupedLogs.push(cleanLogs[cleanLogs.length - 1]);
         }

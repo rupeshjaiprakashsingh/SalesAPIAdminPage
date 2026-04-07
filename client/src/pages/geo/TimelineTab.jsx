@@ -19,13 +19,17 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
     const [activeTimelineEvent, setActiveTimelineEvent] = useState(null);
     const [playbackState, setPlaybackState] = useState({ isPlaying: false, speed: 1, currentIndex: 0 });
     const [liveLocation, setLiveLocation] = useState(null);
+    const [isAutoRefresh, setIsAutoRefresh] = useState(false); // Default to false as requested
+    const hasInitialBoundsSet = React.useRef(false);
 
     // ─── Live Location Sync for Today's Timeline ─────────────────────────────
-    const fetchLiveLocation = useCallback(async () => {
+    const fetchLiveLocation = useCallback(async (force = false) => {
         if (!timelineUser || timelineDate !== todayStr) {
             setLiveLocation(null);
             return;
         }
+        if (!isAutoRefresh && !force) return;
+        
         const token = getToken();
         if (!token) return;
         try {
@@ -41,12 +45,12 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
         } catch (err) {
             console.error("Error fetching live location for timeline:", err);
         }
-    }, [timelineUser, timelineDate, todayStr]);
+    }, [timelineUser, timelineDate, todayStr, isAutoRefresh]);
 
     useEffect(() => {
-        fetchLiveLocation();
+        fetchLiveLocation(true); // Force one fetch on user/date change
         if (timelineDate === todayStr) {
-            const interval = setInterval(fetchLiveLocation, 10000);
+            const interval = setInterval(() => fetchLiveLocation(), 10000);
             return () => clearInterval(interval);
         }
     }, [fetchLiveLocation, timelineDate, todayStr]);
@@ -134,8 +138,10 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
             } else if (!timelineUser) {
                 setTimelineUser(usersList[0]._id);
             }
+            // Reset bounds flag whenever user changes
+            hasInitialBoundsSet.current = false;
         }
-    }, [usersList]);
+    }, [usersList, timelineUser, timelineDate]);
 
     // Fetch dashboard stats for the selected date to populate the dropdown status
     useEffect(() => {
@@ -327,7 +333,11 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
 
     // ─── Fit map bounds ─────────────────────────────────────────────────────
     useEffect(() => {
-        if (!timelineMapInstance || !window.google) return;
+        if (!timelineMapInstance || !window.google || hasInitialBoundsSet.current) return;
+        
+        // If we have no points yet, don't set the flag true (wait for data)
+        if (!fullRoutePath.length && !liveLocation) return;
+
         const bounds = new window.google.maps.LatLngBounds();
         let hasPoints = false;
         
@@ -340,6 +350,7 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
 
         if (hasPoints) {
             timelineMapInstance.fitBounds(bounds);
+            hasInitialBoundsSet.current = true; // Mark as done for this user/date
             const listener = window.google.maps.event.addListener(timelineMapInstance, 'idle', () => {
                 if (timelineMapInstance.getZoom() > 16) timelineMapInstance.setZoom(16);
                 window.google.maps.event.removeListener(listener);
@@ -472,17 +483,74 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                 </button>
             </div>
 
+            {/* Live Status High-Visibility Banner */}
+            {liveLocation && timelineDate === todayStr && (
+                <div 
+                    onClick={() => {
+                        if (timelineMapInstance && liveLocation.latitude) {
+                            timelineMapInstance.panTo({ lat: Number(liveLocation.latitude), lng: Number(liveLocation.longitude) });
+                            timelineMapInstance.setZoom(17);
+                        }
+                    }}
+                    style={{ 
+                        background: '#eff6ff', 
+                        border: '1px solid #3b82f6', 
+                        borderRadius: '10px', 
+                        padding: '12px 16px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between', 
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.1)',
+                        animation: 'fadeIn 0.5s ease-out'
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div className="pulse-dot" style={{ width: '12px', height: '12px', background: '#3b82f6', borderRadius: '50%', boxShadow: '0 0 0 4px rgba(59, 130, 246, 0.2)' }}></div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e3a8a', letterSpacing: '0.5px' }}>LIVE NOW — {liveLocation.name.toUpperCase()}</span>
+                                <span style={{ fontSize: '0.7rem', color: '#3b82f6', fontWeight: 600 }}>({liveLocation.isOnline ? 'ONLINE' : 'OFFLINE'})</span>
+                            </div>
+                            <span style={{ fontSize: '0.78rem', color: '#1e40af', fontWeight: 500 }}>
+                                <i className="ri-map-pin-2-fill" style={{ marginRight: '6px' }}></i>
+                                {liveLocation.address || "Fetching latest address..."}
+                            </span>
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                         <span style={{ fontSize: '0.65rem', color: '#60a5fa', fontWeight: 700 }}>
+                            {liveLocation.lastSeen ? `LAST SEEN: ${new Date(liveLocation.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "ACTIVE NOW"}
+                        </span>
+                        <div style={{ fontSize: '0.62rem', color: '#3b82f6', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '2px' }}>
+                             TAP TO FOCUS <i className="ri-focus-3-line"></i>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Split Layout */}
             <div style={{ display: 'flex', flex: 1, gap: '16px', overflow: 'hidden' }}>
                 {/* Left Sidebar */}
                 <div style={{ width: '300px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontWeight: 600, color: '#374151', fontSize: '0.9rem' }}>Timeline</span>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <div style={{ width: '36px', height: '20px', background: '#10b981', borderRadius: '20px', position: 'relative', cursor: 'pointer' }}>
-                                <div style={{ width: '16px', height: '16px', background: 'white', borderRadius: '50%', position: 'absolute', right: '2px', top: '2px' }}></div>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <div 
+                                    onClick={() => setIsAutoRefresh(!isAutoRefresh)}
+                                    style={{ width: '36px', height: '20px', background: isAutoRefresh ? '#3b82f6' : '#d1d5db', borderRadius: '20px', position: 'relative', cursor: 'pointer', transition: 'all 0.3s' }}
+                                >
+                                    <div style={{ width: '16px', height: '16px', background: 'white', borderRadius: '50%', position: 'absolute', left: isAutoRefresh ? '18px' : '2px', top: '2px', transition: 'all 0.3s' }}></div>
+                                </div>
+                                <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 500 }}>Live Refresh</span>
                             </div>
-                            <span style={{ fontSize: '0.8rem', color: '#6b7280', fontWeight: 500 }}>Activity</span>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <div style={{ width: '36px', height: '20px', background: '#10b981', borderRadius: '20px', position: 'relative', cursor: 'pointer' }}>
+                                    <div style={{ width: '16px', height: '16px', background: 'white', borderRadius: '50%', position: 'absolute', right: '2px', top: '2px' }}></div>
+                                </div>
+                                <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 500 }}>Activity</span>
+                            </div>
                         </div>
                     </div>
 
@@ -500,53 +568,10 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                         </div>
                     </div>
 
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 16px 0' }}>
-                        {/* Live Now Card (Visible only for today) */}
-                        {liveLocation && (
-                            <div
-                                onClick={() => {
-                                    if (timelineMapInstance && liveLocation.latitude) {
-                                        timelineMapInstance.panTo({ lat: liveLocation.latitude, lng: liveLocation.longitude });
-                                        timelineMapInstance.setZoom(17);
-                                    }
-                                }}
-                                style={{
-                                    margin: '0 8px 16px 8px',
-                                    padding: '12px',
-                                    background: '#eff6ff',
-                                    border: '1px solid #3b82f6',
-                                    borderRadius: '10px',
-                                    cursor: 'pointer',
-                                    position: 'relative',
-                                    boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.1)'
-                                }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <div className="pulse-dot" style={{ width: '8px', height: '8px', background: '#3b82f6', borderRadius: '50%' }}></div>
-                                        <span style={{ fontWeight: 700, fontSize: '0.75rem', color: '#1e40af' }}>LIVE NOW — {liveLocation.name}</span>
-                                    </div>
-                                    <span style={{ fontSize: '0.7rem', color: '#60a5fa', fontWeight: 600 }}>
-                                        {liveLocation.lastSeen ? new Date(liveLocation.lastSeen).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : "Now"}
-                                    </span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                                    <i className="ri-map-pin-2-fill" style={{ color: '#3b82f6', fontSize: '1.2rem', marginTop: '2px' }}></i>
-                                    <div style={{ flex: 1 }}>
-                                        <p style={{ margin: 0, fontSize: '0.75rem', color: '#1e3a8a', fontWeight: 600, lineHeight: '1.4' }}>
-                                            {liveLocation.address || "Fetching address..."}
-                                        </p>
-                                        <p style={{ margin: '4px 0 0 0', fontSize: '0.65rem', color: '#3b82f6', fontWeight: 500 }}>
-                                            TAP TO FOCUS ON MAP
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {timelineLoading && <p style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>Loading timeline...</p>}
-                        {!timelineLoading && timelineEvents.length === 0 && <p style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '0.85rem' }}>No tracking data found for this date.</p>}
-
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px 8px 0' }}>
+                        {timelineLoading && <p style={{ textAlign: 'center', padding: '10px', color: '#9ca3af', fontSize: '0.75rem' }}>Loading logs...</p>}
+                        {!timelineLoading && timelineEvents.length === 0 && <p style={{ textAlign: 'center', padding: '10px', color: '#9ca3af', fontSize: '0.75rem' }}>No logs for this date.</p>}
+                        
                         {!timelineLoading && timelineEvents.map((evt, idx) => {
                             const isActive = activeTimelineEvent?.id === evt.id;
                             return (
@@ -575,41 +600,41 @@ const TimelineTab = ({ isLoaded, onNavigateToDashboard }) => {
                                             setPlaybackState(p => ({ ...p, isPlaying: false, currentIndex: closestIdx }));
                                         }
                                     }}
-                                    style={{ display: 'flex', marginBottom: '6px', position: 'relative', cursor: 'pointer', background: isActive || evt.type === 'Punch' ? '#f0fdf4' : 'transparent', border: isActive || evt.type === 'Punch' ? '1px solid #10b981' : '1px solid transparent', borderRadius: '8px', padding: '12px 8px', marginLeft: '4px', marginRight: '4px' }}
+                                    style={{ display: 'flex', marginBottom: '4px', position: 'relative', cursor: 'pointer', background: isActive || evt.type === 'Punch' ? '#f0fdf4' : 'transparent', border: isActive || evt.type === 'Punch' ? '1px solid #10b981' : '1px solid transparent', borderRadius: '6px', padding: '6px 8px', marginLeft: '4px', marginRight: '4px' }}
                                 >
                                     {idx !== timelineEvents.length - 1 && (
-                                        <div style={{ position: 'absolute', left: '68px', top: '38px', bottom: '-15px', width: '1px', background: '#d1d5db', zIndex: 1 }}></div>
+                                        <div style={{ position: 'absolute', left: '60px', top: '28px', bottom: '-4px', width: '1px', background: '#e5e7eb', zIndex: 1 }}></div>
                                     )}
-                                    <div style={{ width: '56px', textAlign: 'right', fontSize: '0.75rem', color: '#9ca3af', fontWeight: 500, paddingTop: '1px' }}>
+                                    <div style={{ width: '48px', textAlign: 'right', fontSize: '0.68rem', color: '#9ca3af', fontWeight: 500, paddingTop: '1px' }}>
                                         {new Date(evt.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                     </div>
-                                    <div style={{ width: '26px', display: 'flex', justifyContent: 'center', zIndex: 2 }}>
-                                        {evt.type === 'Start' ? <i className="ri-focus-3-line" style={{ color: isActive ? '#10b981' : '#6b7280', fontSize: '1.2rem', marginTop: '-2px' }}></i>
-                                            : evt.type === 'Stop' ? <i className="ri-hourglass-2-line" style={{ color: isActive ? '#10b981' : '#6b7280', fontSize: '1.1rem', marginTop: '-1px' }}></i>
-                                                : evt.type === 'Outage' ? <i className="ri-cloud-off-line" style={{ color: '#ef4444', fontSize: '1.2rem', marginTop: '-2px' }}></i>
-                                                    : evt.type === 'Punch' ? <i className="ri-price-tag-3-line" style={{ color: '#10b981', fontSize: '1.2rem', marginTop: '-2px' }}></i>
-                                                    : <i className="ri-steering-2-line" style={{ color: isActive ? '#10b981' : '#6b7280', fontSize: '1.2rem', marginTop: '-2px' }}></i>}
+                                    <div style={{ width: '24px', display: 'flex', justifyContent: 'center', zIndex: 2 }}>
+                                        {evt.type === 'Start' ? <i className="ri-focus-3-line" style={{ color: isActive ? '#10b981' : '#6b7280', fontSize: '1rem', marginTop: '-1px' }}></i>
+                                            : evt.type === 'Stop' ? <i className="ri-hourglass-2-line" style={{ color: isActive ? '#10b981' : '#6b7280', fontSize: '1rem', marginTop: '-1px' }}></i>
+                                                : evt.type === 'Outage' ? <i className="ri-cloud-off-line" style={{ color: '#ef4444', fontSize: '1rem', marginTop: '-1px' }}></i>
+                                                    : evt.type === 'Punch' ? <i className="ri-price-tag-3-line" style={{ color: '#10b981', fontSize: '1rem', marginTop: '-1px' }}></i>
+                                                    : <i className="ri-steering-2-line" style={{ color: isActive ? '#10b981' : '#6b7280', fontSize: '1rem', marginTop: '-1px' }}></i>}
                                     </div>
-                                    <div style={{ flex: 1, paddingLeft: '8px' }}>
+                                    <div style={{ flex: 1, paddingLeft: '6px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <span style={{ fontWeight: 600, fontSize: '0.75rem', color: evt.type === 'Outage' ? '#ef4444' : (isActive || evt.type === 'Punch' ? '#111827' : '#111827') }}>
+                                            <span style={{ fontWeight: 600, fontSize: '0.7rem', color: evt.type === 'Outage' ? '#ef4444' : (isActive || evt.type === 'Punch' ? '#111827' : '#111827') }}>
                                                 {evt.type === 'Start' ? 'Tracking Started' : evt.type === 'Punch' ? 'Geotag' : evt.type}
                                             </span>
                                             {evt.type === 'Drive' && (
-                                                <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline' }}>
-                                                    <span style={{ fontSize: '0.7rem', color: '#111827', fontWeight: 600 }}>{evt.distanceKm} km</span>
-                                                    <span style={{ color: '#10b981', fontSize: '0.75rem', fontWeight: 600 }}>{evt.durationMin >= 60 ? `${Math.floor(evt.durationMin / 60)}h ${evt.durationMin % 60}m` : `${evt.durationMin}m`}</span>
+                                                <div style={{ display: 'flex', gap: '4px', alignItems: 'baseline' }}>
+                                                    <span style={{ fontSize: '0.65rem', color: '#111827', fontWeight: 600 }}>{evt.distanceKm}km</span>
+                                                    <span style={{ color: '#10b981', fontSize: '0.65rem', fontWeight: 600 }}>{evt.durationMin >= 60 ? `${Math.floor(evt.durationMin / 60)}h${evt.durationMin % 60}m` : `${evt.durationMin}m`}</span>
                                                 </div>
                                             )}
-                                            {evt.type === 'Stop' && <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>{evt.duration >= 60 ? `${Math.floor(evt.duration / 60)}h ${evt.duration % 60}m` : `${evt.duration}m`}</span>}
-                                            {evt.type === 'Outage' && <span style={{ fontSize: '0.75rem', color: '#111827', fontWeight: 600 }}>{evt.durationMin >= 60 ? `${Math.floor(evt.durationMin / 60)}h ${evt.durationMin % 60}m` : `${evt.durationMin}m`}</span>}
-                                            {evt.type === 'Punch' && <span style={{ fontSize: '0.65rem', border: '1px solid #10b981', background: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>{evt.punchType}</span>}
+                                            {evt.type === 'Stop' && <span style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: 600 }}>{evt.duration >= 60 ? `${Math.floor(evt.duration / 60)}h${evt.duration % 60}m` : `${evt.duration}m`}</span>}
+                                            {evt.type === 'Outage' && <span style={{ fontSize: '0.65rem', color: '#111827', fontWeight: 600 }}>{evt.durationMin >= 60 ? `${Math.floor(evt.durationMin / 60)}h${evt.durationMin % 60}m` : `${evt.durationMin}m`}</span>}
+                                            {evt.type === 'Punch' && <span style={{ fontSize: '0.6rem', border: '1px solid #10b981', background: '#dcfce7', color: '#166534', padding: '1px 4px', borderRadius: '3px', fontWeight: 600 }}>{evt.punchType}</span>}
                                         </div>
-                                        {evt.deviceId && evt.type === 'Punch' && <div style={{ fontSize: '0.68rem', color: '#10b981', marginTop: '2px', fontFamily: 'monospace' }}>{evt.deviceId}</div>}
-                                        {evt.address && (evt.type === 'Stop' || evt.type === 'Punch') && <div style={{ fontSize: '0.72rem', color: (isActive || evt.type === 'Punch') ? '#16a34a' : '#6b7280', marginTop: '6px', lineHeight: '1.4' }}>{evt.address}</div>}
+                                        {evt.deviceId && evt.type === 'Punch' && <div style={{ fontSize: '0.62rem', color: '#bbf7d0', marginTop: '1px', fontFamily: 'monospace' }}>{evt.deviceId}</div>}
+                                        {evt.address && (evt.type === 'Stop' || evt.type === 'Punch') && <div style={{ fontSize: '0.68rem', color: (isActive || evt.type === 'Punch') ? '#16a34a' : '#6b7280', marginTop: '4px', lineHeight: '1.3' }}>{evt.address}</div>}
                                         {evt.type === 'Outage' && evt.message && (
-                                            <div style={{ fontSize: '0.72rem', color: '#ef4444', marginTop: '6px', lineHeight: '1.4', background: '#fef2f2', border: '1px solid #fecaca', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>
-                                                {evt.message} <i className="ri-error-warning-line" style={{ marginLeft: '4px' }}></i>
+                                            <div style={{ fontSize: '0.65rem', color: '#ef4444', marginTop: '4px', lineHeight: '1.3', background: '#fef2f2', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: '3px', display: 'inline-block' }}>
+                                                {evt.message}
                                             </div>
                                         )}
                                     </div>

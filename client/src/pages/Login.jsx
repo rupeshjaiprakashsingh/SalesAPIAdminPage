@@ -6,11 +6,11 @@ import { toast } from "react-toastify";
 import { Link, useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa6";
 import Logo from "../assets/logo.png";
-import GoogleSvg from "../assets/icons8-google.svg";
 import "../styles/Login.css";
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const token = JSON.parse(localStorage.getItem("auth")) || "";
   const navigate = useNavigate();
 
@@ -19,7 +19,7 @@ const Login = () => {
       toast.success("You are already logged in");
       navigate("/dashboard");
     }
-  }, []);
+  }, [token, navigate]);
 
   // -------------------------
   // Yup Validation Schema
@@ -50,20 +50,20 @@ const Login = () => {
     validateOnBlur: true,
     validateOnChange: true,
     onSubmit: async (values) => {
+      setIsSubmitting(true);
       try {
-        // Save tenant to local storage before API call so the axios interceptor picks it up
         localStorage.setItem("tenant_id", values.tenantId);
-        
         const response = await axios.post("/api/v1/login", {
             username: values.username,
             password: values.password
         });
         localStorage.setItem("auth", JSON.stringify(response.data.token));
-
         toast.success(`Welcome back, ${response.data.name}!`);
         navigate("/dashboard");
       } catch (err) {
         toast.error(err?.response?.data?.msg || err.message);
+      } finally {
+        setIsSubmitting(false);
       }
     },
   });
@@ -178,11 +178,8 @@ const Login = () => {
               </div>
 
               <div className="login-center-buttons">
-                <button type="submit">Log In</button>
-
-                <button type="button">
-                  <img src={GoogleSvg} alt="" />
-                  Log In with Google
+                <button type="submit" disabled={isSubmitting || !formik.isValid}>
+                  {isSubmitting ? "Signing in..." : "Log In"}
                 </button>
               </div>
             </form>

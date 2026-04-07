@@ -1,10 +1,13 @@
 {
-  "name": "simple-login-and-register-with-json-web-token",
+  "name": "sales-admin-api",
   "version": "1.0.0",
-  "description": "",
+  "description": "Sales Admin backend API with multi-tenant support, location tracking and attendance management",
   "main": "app.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
-    "start": "node app.js",
+    "start": "NODE_ENV=production node app.js",
     "dev": "nodemon app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

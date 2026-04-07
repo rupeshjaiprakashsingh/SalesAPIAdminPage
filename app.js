@@ -4,6 +4,7 @@ require("express-async-errors");
 const connectDB = require("./db/connect");
 const express = require("express");
 const cors = require("cors");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 
@@ -22,7 +23,29 @@ const { scheduleDailyReport, scheduleKeepAlive, schedulePhotoCleanup, deleteOldP
 // Middlewares
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
-app.use(cors());
+
+// CORS — lock down to known origins in production
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "").split(",").map(o => o.trim()).filter(Boolean);
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (mobile apps, curl, Render health checks)
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`CORS: origin ${origin} not allowed`));
+    }
+  },
+  credentials: true
+}));
+
+// Rate limiter for auth endpoints — 10 attempts per 15 min per IP
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { msg: "Too many login attempts. Please try again after 15 minutes." }
+});
 
 // Serve uploads
 const path = require("path");
@@ -36,36 +59,38 @@ app.get("/ping", (req, res) => {
   res.status(200).send("ok");
 });
 
-// External Cron entry point for cleaning photos (bypasses tenant middleware so it handles all tenants)
-app.get("/api/v1/cleanup-photos", async (req, res) => {
-  const result = await deleteOldPhotos();
-  if (result.success) {
-    res.status(200).json(result);
-  } else {
-    res.status(500).json(result);
+// Internal Cron entry points — secured with a server-only secret key
+const cronAuth = (req, res, next) => {
+  const key = req.headers["x-cron-secret"];
+  if (!process.env.CRON_SECRET || key !== process.env.CRON_SECRET) {
+    return res.status(403).json({ msg: "Forbidden" });
   }
+  next();
+};
+
+app.get("/api/v1/cleanup-photos", cronAuth, async (req, res) => {
+  const result = await deleteOldPhotos();
+  res.status(result.success ? 200 : 500).json(result);
 });
 
-// External Cron entry point for cleaning location logs when storage hits 80% (400MB)
-app.get("/api/v1/cleanup-location-logs", async (req, res) => {
+app.get("/api/v1/cleanup-location-logs", cronAuth, async (req, res) => {
   const result = await cleanupLocationLogs();
-  if (result.success) {
-    res.status(200).json(result);
-  } else {
-    res.status(500).json(result);
-  }
+  res.status(result.success ? 200 : 500).json(result);
 });
+
+// Apply rate limiter BEFORE tenant middleware — blocks brute-force before any DB call
+app.use("/api/v1/login", authLimiter);
+app.use("/api/v1/register", authLimiter);
 
 // Apply tenant middleware to ALL /api/v1 routes
 app.use("/api/v1", tenantMiddleware);
 
 // Versioned APIs
-// Mount user routes at /api/v1 so endpoints become /api/v1/login, /api/v1/register
-app.use("/api/v1", userRoutes);                 // Example: /api/v1/register
-app.use("/api/v1/attendance", attendanceRoutes); // Example: /api/v1/attendance/mark
-app.use("/api/v1/dashboard", dashboardRoutes);   // Example: /api/v1/dashboard/admin-stats
-app.use("/api/v1/reports", reportRoutes);        // Example: /api/v1/reports/monthly-report
-app.use("/api/v1/enquiry", require("./routes/enquiry")); // Public API for enquiry form
+app.use("/api/v1", userRoutes);
+app.use("/api/v1/attendance", attendanceRoutes);
+app.use("/api/v1/dashboard", dashboardRoutes);
+app.use("/api/v1/reports", reportRoutes);
+app.use("/api/v1/enquiry", require("./routes/enquiry"));
 app.use("/api/v1/geofence", require("./routes/geofence"));
 app.use("/api/v1/location", require("./routes/location"));
 app.use("/api/v1/tracking", require("./routes/trackingRoutes"));
@@ -86,8 +111,20 @@ const start = async () => {
       schedulePhotoCleanup();
     });
   } catch (error) {
-    console.log(error);
+    console.error("[FATAL] Server failed to start:", error);
+    process.exit(1);
   }
 };
+
+// Global error handler — must be last middleware
+app.use((err, req, res, next) => {
+  const status = err.statusCode || 500;
+  const isDev = process.env.NODE_ENV !== "production";
+  console.error(`[ERROR] ${req.method} ${req.path}:`, err.message);
+  res.status(status).json({
+    msg: err.message || "Internal Server Error",
+    ...(isDev && { stack: err.stack })
+  });
+});
 
 start();

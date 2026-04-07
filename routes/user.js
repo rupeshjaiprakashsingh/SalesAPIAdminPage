@@ -5,7 +5,6 @@ const authMiddleware = require("../middleware/auth");
 const {
     login,
     register,
-    dashboard,
     getAllUsers,
     getUserById,
     createUser,
@@ -13,15 +12,16 @@ const {
     deleteUser,
     getProfile,
     updateProfile,
+    updateFcmToken,
     resetDevice
 } = require("../controllers/user");
 
 router.route("/login").post(login);
 router.route("/register").post(register);
-router.route("/dashboard").get(authMiddleware, dashboard);
 
 // Profile Routes
 router.route("/users/profile").get(authMiddleware, getProfile).put(authMiddleware, updateProfile);
+router.put("/users/fcm-token", authMiddleware, updateFcmToken);
 
 // Admin User CRUD Routes
 router.route("/users").get(authMiddleware, getAllUsers).post(authMiddleware, createUser);

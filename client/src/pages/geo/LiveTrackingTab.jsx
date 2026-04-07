@@ -12,12 +12,15 @@ const LiveTrackingTab = ({ isLoaded }) => {
     const [loading, setLoading] = useState(false);
 
     const [hoveredEmp, setHoveredEmp] = useState(null);
+    const [isAutoRefresh, setIsAutoRefresh] = useState(true); // Default to true for live tracking, but controllable
+    const hasInitialBoundsSet = useRef(false);
     const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
     const mapContainerRef = useRef(null);
     const hideTimeout = useRef(null);
 
 
     const fetchLiveLocations = useCallback(async () => {
+        if (!isAutoRefresh) return;
         const token = getToken();
         if (!token) return;
         setLoading(true);
@@ -61,12 +64,13 @@ const LiveTrackingTab = ({ isLoaded }) => {
         if (selectedEmp) {
             mapInstance.panTo({ lat: selectedEmp.latitude, lng: selectedEmp.longitude });
             mapInstance.setZoom(15);
-        } else if (employees.length > 0) {
+        } else if (employees.length > 0 && !hasInitialBoundsSet.current) {
             const bounds = new window.google.maps.LatLngBounds();
             employees.forEach((emp) => {
                 if (emp.latitude && emp.longitude) bounds.extend({ lat: emp.latitude, lng: emp.longitude });
             });
             mapInstance.fitBounds(bounds);
+            hasInitialBoundsSet.current = true;
             window.google.maps.event.addListenerOnce(mapInstance, "idle", () => {
                 if (mapInstance.getZoom() > 14) mapInstance.setZoom(14);
             });
@@ -279,6 +283,15 @@ const LiveTrackingTab = ({ isLoaded }) => {
                     <h3 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#6b7280", letterSpacing: "0.5px" }}>
                         FIELD STAFF ({employees.length})
                     </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+                        <div 
+                            onClick={() => setIsAutoRefresh(!isAutoRefresh)}
+                            style={{ width: '32px', height: '18px', background: isAutoRefresh ? '#3b82f6' : '#d1d5db', borderRadius: '20px', position: 'relative', cursor: 'pointer', transition: 'all 0.3s' }}
+                        >
+                            <div style={{ width: '14px', height: '14px', background: 'white', borderRadius: '50%', position: 'absolute', left: isAutoRefresh ? '16px' : '2px', top: '2px', transition: 'all 0.3s' }}></div>
+                        </div>
+                        <span style={{ fontSize: '11px', color: '#6b7280', fontWeight: 600 }}>Auto Refresh</span>
+                    </div>
                 </div>
 
                 {!loading && employees.length === 0 && (

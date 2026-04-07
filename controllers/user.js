@@ -2,7 +2,7 @@ const jwt = require("jsonwebtoken");
 // User model now comes from req.models (tenant-specific)
 
 const login = async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, fcmToken } = req.body;
 
   if (!username || !password) {
     return res.status(400).json({
@@ -16,6 +16,11 @@ const login = async (req, res) => {
     const isMatch = await foundUser.comparePassword(password);
 
     if (isMatch) {
+      if (fcmToken) {
+        foundUser.fcmToken = fcmToken;
+        await foundUser.save();
+      }
+
       const token = jwt.sign(
         { id: foundUser._id, name: foundUser.name, role: foundUser.role },
         process.env.JWT_SECRET,
@@ -33,14 +38,6 @@ const login = async (req, res) => {
   }
 };
 
-const dashboard = async (req, res) => {
-  const luckyNumber = Math.floor(Math.random() * 100);
-
-  res.status(200).json({
-    msg: `Hello, ${req.user.name}`,
-    secret: `Here is your authorized data, your lucky number is ${luckyNumber}`,
-  });
-};
 
 const getAllUsers = async (req, res) => {
   try {
@@ -263,7 +260,6 @@ const register = async (req, res) => {
 module.exports = {
   login,
   register,
-  dashboard,
   getAllUsers,
   getUserById,
   createUser,
@@ -311,6 +307,21 @@ module.exports = {
         const formattedField = field === 'mobileNumber' ? 'Mobile Number' : (field.charAt(0).toUpperCase() + field.slice(1));
         return res.status(400).json({ msg: `${formattedField} is already in use. Please select a different one.` });
       }
+      res.status(500).json({ msg: error.message });
+    }
+  },
+  updateFcmToken: async (req, res) => {
+    try {
+      const User = req.models.User;
+      const { fcmToken } = req.body;
+      const user = await User.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ msg: "User not found" });
+      }
+      user.fcmToken = fcmToken;
+      await user.save();
+      res.status(200).json({ msg: "FCM token updated successfully" });
+    } catch (error) {
       res.status(500).json({ msg: error.message });
     }
   },
