@@ -78,6 +78,19 @@ app.get("/api/v1/cleanup-location-logs", cronAuth, async (req, res) => {
   res.status(result.success ? 200 : 500).json(result);
 });
 
+// Unified endpoint for external cron schedulers (like cron-job.org)
+app.get("/api/v1/run-daily-cleanup", cronAuth, async (req, res) => {
+  const photoResult = await deleteOldPhotos();
+  const locationResult = await cleanupLocationLogs();
+  
+  const isSuccess = photoResult.success && locationResult.success;
+  res.status(isSuccess ? 200 : 500).json({
+    success: isSuccess,
+    photos_cleanup: photoResult,
+    location_cleanup: locationResult
+  });
+});
+
 // Apply rate limiter BEFORE tenant middleware — blocks brute-force before any DB call
 app.use("/api/v1/login", authLimiter);
 app.use("/api/v1/register", authLimiter);

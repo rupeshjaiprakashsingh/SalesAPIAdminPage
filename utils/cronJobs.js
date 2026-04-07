@@ -154,7 +154,7 @@ const deleteOldPhotos = async () => {
             const { models } = getTenantModels(tenantId);
             const { Attendance } = models;
 
-            // Unset photoUrl (Base64 string) to free up MongoDB space
+            // Unset photoUrl (Base64 string) to free up MongoDB space for older than 90 days
             const result = await Attendance.updateMany(
                 {
                     deviceTime: { $lt: ninetyDaysAgo },
@@ -164,8 +164,16 @@ const deleteOldPhotos = async () => {
                     $unset: { photoUrl: 1 }
                 }
             );
-            console.log(`[${tenant.name}] Cleaned up ${result.modifiedCount} old attendance photos.`);
-            cleanupReport.push({ tenant: tenant.name, cleaned: result.modifiedCount });
+            
+            // Outright delete Attendance logs older than 365 (1 year) days to completely free space
+            const oneYearAgo = new Date();
+            oneYearAgo.setDate(oneYearAgo.getDate() - 365);
+            const oldAttendanceCleanup = await Attendance.deleteMany({
+                deviceTime: { $lt: oneYearAgo }
+            });
+
+            console.log(`[${tenant.name}] Cleaned up ${result.modifiedCount} old attendance photos and purged ${oldAttendanceCleanup.deletedCount} ancient records.`);
+            cleanupReport.push({ tenant: tenant.name, photosCleaned: result.modifiedCount, oldLogsPurged: oldAttendanceCleanup.deletedCount });
         }
         return { success: true, message: "Photo cleanup executed.", report: cleanupReport };
     } catch (e) {
@@ -191,12 +199,12 @@ const cleanupLocationLogs = async () => {
             if (totalStorageBytes > thresholdBytes) {
                 console.log(`[${tenant.name}] Storage > 80% (${Math.round(totalStorageBytes/1024/1024)}MB). Pruning old location logs.`);
                 
-                // Delete logs older than 60 days to free up space (keeping recent logs intact for live tracking)
-                const sixtyDaysAgo = new Date();
-                sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+                // Delete logs older than 30 days to free up space (keeping recent logs intact for live tracking)
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
                 
                 const result = await EmployeeLocationLog.deleteMany({
-                    timestamp: { $lt: sixtyDaysAgo }
+                    timestamp: { $lt: thirtyDaysAgo }
                 });
 
                 cleanupReport.push({ 
