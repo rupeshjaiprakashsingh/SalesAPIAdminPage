@@ -4,7 +4,7 @@
   "description": "Sales Admin backend API with multi-tenant support, location tracking and attendance management",
   "main": "app.js",
   "engines": {
-    "node": ">=18.0.0"
+    "node": "20.x"
   },
   "scripts": {
     "start": "NODE_ENV=production node app.js",
