@@ -672,8 +672,12 @@ exports.getTimelineReport = async (req, res) => {
             const distFromAnchor = calculateDistance(spatialAnchor.latitude, spatialAnchor.longitude, curr.latitude, curr.longitude);
             const elapsed = new Date(curr.timestamp) - new Date(lastLog.timestamp);
 
+            // GPS Drift Guard: Movement must exceed the dynamic accuracy of the GPS signal
+            // If GPS accuracy is 25m, a 20m jump is just noise.
+            const dynamicJitter = Math.max(JITTER_THRESHOLD, (curr.accuracy || 20) * 1.2);
+
             // Keep point if it strictly broke the spatial jitter threshold
-            if (distFromAnchor >= JITTER_THRESHOLD) {
+            if (distFromAnchor >= dynamicJitter) {
                 dedupedLogs.push(curr);
                 spatialAnchor = curr; // update anchor since they clearly moved
             } 
@@ -759,7 +763,8 @@ exports.getTimelineReport = async (req, res) => {
         }
 
         // ─── STEP 5: Build route from all clean logs (per user request to plot all locations) ────────────
-        const route = cleanLogs.map(log => ({
+        // Drawing the dedupedLogs ensures the UI does not show the spider-web GPS drift.
+        const route = dedupedLogs.map(log => ({
             lat: log.latitude,
             lng: log.longitude,
             time: log.timestamp,
