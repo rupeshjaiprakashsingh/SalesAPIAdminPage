@@ -14,6 +14,7 @@ const AttendanceApproval = () => {
     const [selectedIds, setSelectedIds] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [zoomPhoto, setZoomPhoto] = useState(null);
     const selectAllRef = useRef(null);
 
     const token =
@@ -173,10 +174,12 @@ const AttendanceApproval = () => {
                     <img
                         src={record.photoUrl}
                         alt="selfie"
+                        onClick={() => setZoomPhoto(record.photoUrl)}
                         style={{
                             width: 44, height: 44, borderRadius: 6,
                             objectFit: 'cover', flexShrink: 0,
-                            border: '1.5px solid #e5e7eb'
+                            border: '1.5px solid #e5e7eb',
+                            cursor: 'zoom-in'
                         }}
                         onError={e => e.target.style.display = 'none'}
                     />
@@ -471,6 +474,39 @@ const AttendanceApproval = () => {
                     </button>
                 </div>
             </div>
+
+            {/* ── Zoom Modal Overlay ── */}
+            {zoomPhoto && (
+                <div 
+                    style={{ 
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+                        background: 'rgba(0,0,0,0.92)', zIndex: 9999, 
+                        display: 'flex', justifyContent: 'center', alignItems: 'center', 
+                        cursor: 'zoom-out' 
+                    }}
+                    onClick={() => setZoomPhoto(null)}
+                >
+                    <div style={{ position: 'relative', maxWidth: '90%', maxHeight: '90%' }}>
+                        <img 
+                            src={zoomPhoto} 
+                            alt="HD View" 
+                            style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 12, boxShadow: '0 0 50px rgba(0,0,0,0.5)' }} 
+                        />
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setZoomPhoto(null); }} 
+                            style={{ 
+                                position: 'absolute', top: -40, right: -40, 
+                                background: 'white', border: 'none', borderRadius: '50%', 
+                                width: 36, height: 36, display: 'flex', 
+                                justifyContent: 'center', alignItems: 'center', 
+                                cursor: 'pointer', fontSize: 20, color: 'black' 
+                            }}
+                        >
+                            <i className="ri-close-line" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Spinner + hover effect styles */}
             <style>{`

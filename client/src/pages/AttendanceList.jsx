@@ -75,6 +75,9 @@ export default function AttendanceList() {
   // Log Modal State
   const [showLogModal, setShowLogModal] = useState(false);
   const [selectedLogRecord, setSelectedLogRecord] = useState(null);
+  
+  // Photo Zoom State
+  const [zoomPhoto, setZoomPhoto] = useState(null);
 
   // API CALL
   const fetchRecords = async (p = page, l = limit) => {
@@ -514,7 +517,8 @@ export default function AttendanceList() {
                                         <img 
                                           src={ev.photoUrl.startsWith('/') ? `${axios.defaults.baseURL || ''}${ev.photoUrl}` : ev.photoUrl} 
                                           alt="Attendance" 
-                                          style={{ width: '140px', height: '180px', objectFit: 'cover', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }} 
+                                          onClick={() => setZoomPhoto(ev.photoUrl.startsWith('/') ? `${axios.defaults.baseURL || ''}${ev.photoUrl}` : ev.photoUrl)}
+                                          style={{ width: '140px', height: '180px', objectFit: 'cover', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'zoom-in' }} 
                                         />
                                     </div>
                                 )}
@@ -536,6 +540,21 @@ export default function AttendanceList() {
             </button>
           </div>
         </div>
+        
+        {zoomPhoto && (
+            <div 
+              style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'zoom-out' }}
+              onClick={(e) => { e.stopPropagation(); setZoomPhoto(null); }}
+            >
+              <img src={zoomPhoto} alt="Zoomed" style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', borderRadius: '8px' }} />
+              <button 
+                onClick={(e) => { e.stopPropagation(); setZoomPhoto(null); }} 
+                style={{ position: 'absolute', top: '20px', right: '20px', background: 'white', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', fontSize: '20px', color: 'black' }}
+              >
+                 <i className="ri-close-line"></i>
+              </button>
+            </div>
+        )}
       </div>
     );
   };
