@@ -126,7 +126,7 @@ const scheduleKeepAlive = () => {
     // Ping every 10 minutes to prevent Render free tier from sleeping
     cron.schedule("*/10 * * * *", () => {
         // Use RENDER_EXTERNAL_URL if available, otherwise fallback to known URL
-        const url = process.env.RENDER_EXTERNAL_URL || "https://salesapiadminpage.onrender.com/api/v1/health";
+        const url = process.env.RENDER_EXTERNAL_URL || "https://api.scanservices.in/api/v1/health";
         console.log(`[Keep-Alive] Pinging ${url}...`);
         
         https.get(url, (res) => {

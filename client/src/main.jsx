@@ -13,7 +13,7 @@ import axios from 'axios';
 // - Override during development by setting VITE_FORCE_API_BASE=true to force using VITE_API_BASE
 const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 const forceApi = import.meta.env.VITE_FORCE_API_BASE === 'true';
-const cloudDefault = import.meta.env.VITE_API_BASE || 'https://mern-login-and-register-with-json-web-78u3.onrender.com';
+const cloudDefault = import.meta.env.VITE_API_BASE || 'https://api.scanservices.in';
 const apiBase = (!isLocalhost || forceApi) ? cloudDefault : 'http://localhost:3000';
 axios.defaults.baseURL = apiBase;
 

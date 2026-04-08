@@ -92,4 +92,4 @@ npm run dev
 ```
 
 # Usage
-After starting the application, visit https://mern-login-and-register-with-json-web-78u3.onrender.com in your browser. Users can now register for a new account or log in using existing credentials.
+After starting the application, visit https://ss.scanservices.in in your browser. Users can now register for a new account or log in using existing credentials.
