@@ -14,6 +14,7 @@ const UserManagement = () => {
     const [totalPages, setTotalPages] = useState(1);
     const [totalUsersCount, setTotalUsersCount] = useState(0);
     const [activeTab, setActiveTab] = useState("active"); // "active" or "deactivated"
+    const [deactivatedCount, setDeactivatedCount] = useState(0);
     const [token] = useState(JSON.parse(localStorage.getItem("auth")) || "");
 
     // Modal State
@@ -52,6 +53,8 @@ const UserManagement = () => {
     useEffect(() => {
         fetchUsers();
         fetchDesignations();
+        // Always fetch the deactivated count so badge is correct regardless of current tab
+        fetchDeactivatedCount();
     }, [page, search, activeTab]);
 
     const fetchDesignations = async () => {
@@ -65,6 +68,15 @@ const UserManagement = () => {
         } catch (error) {
             console.error("Failed to fetch designations", error);
         }
+    };
+
+    const fetchDeactivatedCount = async () => {
+        try {
+            const res = await axios.get(`/api/v1/users?status=deactivated&limit=1`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setDeactivatedCount(res.data.totalUsers || 0);
+        } catch (_) {}
     };
 
     const handleTabChange = (tab) => {
@@ -157,6 +169,13 @@ const UserManagement = () => {
         setCurrentUser({ name: "", username: "", email: "", password: "", role: "user", mobileNumber: "", dateOfBirth: "", employeeId: "" });
     };
 
+    // Close modal on Escape key
+    React.useEffect(() => {
+        const handleEsc = (e) => { if (e.key === 'Escape') setShowModal(false); };
+        if (showModal) document.addEventListener('keydown', handleEsc);
+        return () => document.removeEventListener('keydown', handleEsc);
+    }, [showModal]);
+
     const handleAddPayment = () => {
         toast.info("Payment feature coming soon!");
     };
@@ -184,7 +203,7 @@ const UserManagement = () => {
                         display: 'flex', alignItems: 'center', gap: '6px'
                     }}
                 >
-                    Deactivated Staffs <span style={{ background: activeTab === 'deactivated' ? '#d1d5db' : '#e5e7eb', color: activeTab === 'deactivated' ? '#111827' : '#6b7280', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>{activeTab === 'deactivated' ? totalUsersCount : (activeTab === 'active' && totalUsersCount === 0 ? '' : '')}</span>
+                    Deactivated Staffs <span style={{ background: '#fee2e2', color: '#ef4444', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700 }}>{deactivatedCount}</span>
                 </button>
             </div>
 

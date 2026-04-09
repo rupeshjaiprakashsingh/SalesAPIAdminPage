@@ -21,6 +21,14 @@ const NAV_ITEMS_ADMIN = [
   { to: "/dashboard/settings", label: "System Settings", icon: "ri-settings-4-line" },
 ];
 
+// Extra page titles not in nav items (sub-routes)
+const EXTRA_PAGE_TITLES = [
+  { to: "/dashboard/attendance/approval", label: "Attendance Approval" },
+  { to: "/dashboard/attendance", label: "Mark Attendance" },
+  { to: "/dashboard/attendance-list", label: "Attendance List" },
+  { to: "/dashboard/users", label: "Staff Management" },
+];
+
 const Dashboard = () => {
   const [token] = useState(
     JSON.parse(localStorage.getItem("auth")) || ""
@@ -29,6 +37,7 @@ const Dashboard = () => {
   const [role, setRole] = useState("user");
   const [userName, setUserName] = useState("Staff");
   const [currentTime, setCurrentTime] = useState("");
+  const [pendingCount, setPendingCount] = useState(0);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -82,6 +91,12 @@ const Dashboard = () => {
   };
 
   const pageTitle = () => {
+    // Check extra titles first (more specific routes like /attendance/approval before /attendance)
+    const extraMatch = EXTRA_PAGE_TITLES.find(item =>
+      location.pathname === item.to || location.pathname.startsWith(item.to + "/")
+    );
+    if (extraMatch) return extraMatch.label;
+
     const allItems = [...NAV_ITEMS_COMMON, ...NAV_ITEMS_ADMIN];
     const found = allItems.find(item =>
       item.exact
@@ -90,6 +105,13 @@ const Dashboard = () => {
     );
     return found ? found.label : "Dashboard";
   };
+
+  // Listen for pending count updates broadcast by HomeDashboard
+  useEffect(() => {
+    const handler = (e) => setPendingCount(e.detail?.count ?? 0);
+    window.addEventListener("pendingApprovalsUpdate", handler);
+    return () => window.removeEventListener("pendingApprovalsUpdate", handler);
+  }, []);
 
   return (
     <div className="dashboard-main">
@@ -198,10 +220,29 @@ const Dashboard = () => {
         </div>
         <div className="topbar-right">
           <div className="topbar-time">{currentTime}</div>
-          <button className="topbar-icon-btn topbar-badge" title="Notifications">
+          <Link
+            to="/dashboard/attendance/approval"
+            className="topbar-icon-btn topbar-badge"
+            title={pendingCount > 0 ? `${pendingCount} pending approvals` : "Notifications"}
+            style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+          >
             <i className="ri-notification-3-line"></i>
-            <span className="topbar-badge-dot"></span>
-          </button>
+            {pendingCount > 0 && (
+              <span
+                className="topbar-badge-dot"
+                style={{
+                  position: 'absolute', top: '-4px', right: '-4px',
+                  background: '#ef4444', color: 'white',
+                  borderRadius: '9999px', fontSize: '9px',
+                  fontWeight: 700, minWidth: '16px', height: '16px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '0 3px', border: '2px solid white', lineHeight: 1
+                }}
+              >
+                {pendingCount > 99 ? '99+' : pendingCount}
+              </span>
+            )}
+          </Link>
           <Link to="/dashboard/settings">
             <button className="topbar-icon-btn" title="Settings">
               <i className="ri-settings-4-line"></i>

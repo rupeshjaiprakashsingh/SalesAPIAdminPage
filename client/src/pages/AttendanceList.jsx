@@ -626,7 +626,25 @@ export default function AttendanceList() {
               {statPendingCount > 0 ? 'Approve' : 'Review'}
             </button>
           </div>
-          <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setEndDate(e.target.value); }} style={{ opacity: 0, position: 'absolute', pointerEvents: 'none' }} />
+          {/* Date Range Picker */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>From</label>
+            <input
+              type="date"
+              value={startDate}
+              max={new Date().toISOString().split('T')[0]}
+              onChange={(e) => { setStartDate(e.target.value); }}
+              style={{ padding: '5px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px', color: '#374151', cursor: 'pointer' }}
+            />
+            <label style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>To</label>
+            <input
+              type="date"
+              value={endDate}
+              max={new Date().toISOString().split('T')[0]}
+              onChange={(e) => { setEndDate(e.target.value); }}
+              style={{ padding: '5px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px', color: '#374151', cursor: 'pointer' }}
+            />
+          </div>
         </div>
 
         {/* Stats Row */}

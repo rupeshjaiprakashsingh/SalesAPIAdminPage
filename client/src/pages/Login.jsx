@@ -56,6 +56,8 @@ const Login = () => {
         const response = await axios.post("/api/v1/login", {
             username: values.username,
             password: values.password
+        }, {
+          headers: { "X-Tenant-Id": values.tenantId }
         });
         localStorage.setItem("auth", JSON.stringify(response.data.token));
         toast.success(`Welcome back, ${response.data.name}!`);

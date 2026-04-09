@@ -290,6 +290,12 @@ exports.markAttendance = async (req, res) => {
     // Process photo payload
     let photoUrl = undefined;
     if (photoBase64) {
+      // Guard: reject photos > 5MB (base64 is ~4/3 the size of the original)
+      // 5MB base64 string ≈ 6.7MB raw, but we keep the check on the base64 string length
+      const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5MB
+      if (photoBase64.length > MAX_PHOTO_BYTES) {
+        return res.status(400).json({ message: "Photo is too large. Please use a smaller image (max 5MB)." });
+      }
       // Save Base64 directly to MongoDB to avoid ephemeral disk wipes on Render hosting
       photoUrl = photoBase64;
     }

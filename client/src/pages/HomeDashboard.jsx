@@ -58,13 +58,20 @@ export default function HomeDashboard() {
           }),
         ]);
 
-        setAdminStats(statsRes.data.stats);
+        const fetchedStats = statsRes.data.stats;
+        setAdminStats(fetchedStats);
         setTrend(trendRes.data.trend);
         const activities = activityRes.data.activities;
         setRecentActivity(activities);
-        if (activities.length > 0) {
+
+        // Initialize ref only on first load (don't overwrite on refresh)
+        if (activities.length > 0 && !lastKnownActivityId.current) {
           lastKnownActivityId.current = activities[0]._id;
         }
+
+        // Broadcast pending count to Dashboard topbar bell
+        const pending = fetchedStats?.pendingApprovals ?? 0;
+        window.dispatchEvent(new CustomEvent("pendingApprovalsUpdate", { detail: { count: pending } }));
       } else {
         const statsRes = await axios.get(
           `/api/v1/dashboard/user-stats/${userId}`,
@@ -81,11 +88,13 @@ export default function HomeDashboard() {
 
   // Notification Logic
   const lastKnownActivityId = React.useRef(null);
-  const audioRef = React.useRef(
-    new Audio(
+  const audioRef = React.useRef(null);
+  // Initialize audio lazily to avoid creating Audio object on every render
+  if (!audioRef.current) {
+    audioRef.current = new Audio(
       "https://codeskulptor-demos.commondatastorage.googleapis.com/pang/pop.mp3"
-    )
-  );
+    );
+  }
 
   useEffect(() => {
     if (userRole !== "admin") return;
@@ -95,6 +104,8 @@ export default function HomeDashboard() {
     }
 
     const checkForNewActivity = async () => {
+      // Skip polling if the browser tab is hidden — saves server load
+      if (document.hidden) return;
       try {
         const res = await axios.get(
           "/api/v1/dashboard/recent-activity?limit=5",

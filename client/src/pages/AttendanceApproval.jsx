@@ -116,10 +116,14 @@ const AttendanceApproval = () => {
     };
 
     /* ── Date nav ─────────────────────────────────────────────────────── */
+    const todayStr = new Date().toLocaleDateString('en-CA');
     const shiftDate = (delta) => {
         const d = new Date(date);
         d.setDate(d.getDate() + delta);
-        setDate(d.toLocaleDateString('en-CA'));
+        const shifted = d.toLocaleDateString('en-CA');
+        // Prevent navigating beyond today
+        if (delta > 0 && shifted > todayStr) return;
+        setDate(shifted);
     };
 
     /* ── Helpers ──────────────────────────────────────────────────────── */
@@ -256,6 +260,7 @@ const AttendanceApproval = () => {
                     </button>
                     <input
                         type="date" value={date}
+                        max={todayStr}
                         onChange={e => setDate(e.target.value)}
                         style={{
                             padding: '8px 12px', borderRadius: 8,
@@ -264,9 +269,26 @@ const AttendanceApproval = () => {
                             background: '#f9fafb', cursor: 'pointer'
                         }}
                     />
-                    <button onClick={() => shiftDate(1)} style={navBtn}>
+                    <button
+                        onClick={() => shiftDate(1)}
+                        disabled={date >= todayStr}
+                        style={{ ...navBtn, opacity: date >= todayStr ? 0.4 : 1, cursor: date >= todayStr ? 'not-allowed' : 'pointer' }}
+                    >
                         <i className="ri-arrow-right-s-line" />
                     </button>
+                    {date !== todayStr && (
+                        <button
+                            onClick={() => setDate(todayStr)}
+                            style={{
+                                ...navBtn,
+                                background: '#eff6ff', color: '#2563eb',
+                                border: '1px solid #bfdbfe', fontSize: 12, fontWeight: 700,
+                                padding: '7px 12px'
+                            }}
+                        >
+                            Today
+                        </button>
+                    )}
                 </div>
 
                 {/* Search */}

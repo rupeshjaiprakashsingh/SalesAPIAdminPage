@@ -19,7 +19,7 @@ const Register = () => {
       toast.success("You are already logged in");
       navigate("/dashboard");
     }
-  }, []);
+  }, [token, navigate]);
 
   // -------------------------
   // Yup Validation Schema
@@ -250,10 +250,8 @@ const Register = () => {
 
               {/* BUTTONS */}
               <div className="register-center-buttons">
-                <button type="submit">Sign Up</button>
-                <button type="button">
-                  <img src={GoogleSvg} alt="" />
-                  Sign Up with Google
+                <button type="submit" disabled={formik.isSubmitting || !formik.isValid}>
+                  {formik.isSubmitting ? "Creating account..." : "Sign Up"}
                 </button>
               </div>
             </form>

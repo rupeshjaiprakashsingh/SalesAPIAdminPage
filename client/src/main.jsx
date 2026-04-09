@@ -28,6 +28,21 @@ axios.interceptors.request.use((config) => {
   return Promise.reject(error);
 });
 
+// Auto-logout on 401 (expired/invalid JWT) so users don't get stuck
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      const isLoginPage = window.location.pathname.includes('/login');
+      if (!isLoginPage) {
+        localStorage.removeItem('auth');
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />

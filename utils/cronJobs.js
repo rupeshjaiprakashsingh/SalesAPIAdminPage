@@ -144,9 +144,9 @@ const scheduleKeepAlive = () => {
 
 const deleteOldPhotos = async () => {
     try {
-        console.log("Running auto-cleanup of old attendance photos (older than 90 days)...");
+        console.log("Running auto-cleanup of old attendance photos (older than 60 days)...");
         const ninetyDaysAgo = new Date();
-        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 60); // 60 days: photos rarely reviewed after 2 months
         
         let cleanupReport = [];
 
