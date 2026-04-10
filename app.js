@@ -39,12 +39,14 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiter for auth endpoints — 10 attempts per 15 min per IP
+// Rate limiter for auth endpoints — 50 attempts per 15 min per IP
+// Skipped entirely in development so testing is never blocked
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 50,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === "development",
   message: { msg: "Too many login attempts. Please try again after 15 minutes." }
 });
 
