@@ -11,11 +11,12 @@ exports.getAdminStats = async (req, res) => {
         nextDay.setDate(nextDay.getDate() + 1);
 
         const { User, Attendance } = req.models;
-        // Total active users count
-        const totalUsers = await User.countDocuments({ role: { $ne: "admin" }, isActive: { $ne: false } }); // Count only active staff
 
-        // Today's attendance - count unique users who marked IN
-        const todayIns = await Attendance.aggregate([
+        // Total active non-admin users
+        const totalUsers = await User.countDocuments({ role: { $ne: "admin" }, isActive: { $ne: false } });
+
+        // --- Approved Present: users with an approved IN today ---
+        const approvedIns = await Attendance.aggregate([
             {
                 $match: {
                     deviceTime: { $gte: targetDate, $lt: nextDay },
@@ -24,11 +25,24 @@ exports.getAdminStats = async (req, res) => {
                 }
             },
             { $group: { _id: "$userId" } },
-            { $count: "present" }
+            { $count: "count" }
         ]);
-        const presentToday = todayIns[0]?.present || 0;
-        
-        // Count unique users who marked OUT
+        const presentToday = approvedIns[0]?.count || 0;
+
+        // --- All users who have ANY IN record today (Pending + Approved) ---
+        const anyIns = await Attendance.aggregate([
+            {
+                $match: {
+                    deviceTime: { $gte: targetDate, $lt: nextDay },
+                    attendanceType: "IN"
+                }
+            },
+            { $group: { _id: "$userId" } },
+            { $count: "count" }
+        ]);
+        const totalPunchedInUsers = anyIns[0]?.count || 0;
+
+        // --- Punched Out: users with an OUT record today (any status) ---
         const todayOuts = await Attendance.aggregate([
             {
                 $match: {
@@ -37,27 +51,90 @@ exports.getAdminStats = async (req, res) => {
                 }
             },
             { $group: { _id: "$userId" } },
-            { $count: "punchedOut" }
+            { $count: "count" }
         ]);
-        const punchedOut = todayOuts[0]?.punchedOut || 0;
-        
-        // Count pending approvals
+        const punchedOut = todayOuts[0]?.count || 0;
+
+        // --- Punched In (still at work): have IN but no OUT yet today ---
+        const punchedIn = totalPunchedInUsers - punchedOut;
+
+        // --- Pending Approvals: any record today awaiting review ---
         const pendingApprovals = await Attendance.countDocuments({
             deviceTime: { $gte: targetDate, $lt: nextDay },
             approvalStatus: "Pending"
         });
 
-        const absentToday = totalUsers - presentToday > 0 ? totalUsers - presentToday : 0;
+        // --- Half Day: approved OUT with working hours < 8 and >= 4 ---
+        const halfDayResult = await Attendance.aggregate([
+            {
+                $match: {
+                    deviceTime: { $gte: targetDate, $lt: nextDay },
+                    attendanceType: "OUT",
+                    $or: [{ approvalStatus: "Approved" }, { status: "Present" }],
+                    workingHours: { $gte: 4, $lt: 8 }
+                }
+            },
+            { $group: { _id: "$userId" } },
+            { $count: "count" }
+        ]);
+        const halfDay = halfDayResult[0]?.count || 0;
 
-        // Mock additional fields that might be added to DB later
-        const halfDay = 0;
+        // --- Not Marked: active users with zero records at all today ---
+        const notMarked = Math.max(totalUsers - totalPunchedInUsers, 0);
+
+        // --- Absent: not marked minus those on leave (no leave model yet, so = notMarked) ---
         const onLeave = 0;
         const upcomingLeaves = 0;
-        const overtimeHours = "0h 0m";
-        const fineHours = "0h 0m";
+        const absentToday = Math.max(notMarked - onLeave, 0);
+
+        // --- Daily Work Entries: distinct users with any record today ---
+        const dailyWorkEntries = totalPunchedInUsers;
+
+        // --- Overtime: approved OUT with working hours > 9 ---
+        const overtimeResult = await Attendance.aggregate([
+            {
+                $match: {
+                    deviceTime: { $gte: targetDate, $lt: nextDay },
+                    attendanceType: "OUT",
+                    $or: [{ approvalStatus: "Approved" }, { status: "Present" }],
+                    workingHours: { $gt: 9 }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalOvertimeMins: {
+                        $sum: { $multiply: [{ $subtract: ["$workingHours", 9] }, 60] }
+                    }
+                }
+            }
+        ]);
+        const totalOvertimeMins = Math.round(overtimeResult[0]?.totalOvertimeMins || 0);
+        const overtimeHours = `${Math.floor(totalOvertimeMins / 60)}h ${totalOvertimeMins % 60}m`;
+
+        // --- Fine Hours: approved OUT with working hours < 8 (shortage) ---
+        const fineResult = await Attendance.aggregate([
+            {
+                $match: {
+                    deviceTime: { $gte: targetDate, $lt: nextDay },
+                    attendanceType: "OUT",
+                    $or: [{ approvalStatus: "Approved" }, { status: "Present" }],
+                    workingHours: { $lt: 8, $gt: 0 }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalFineMins: {
+                        $sum: { $multiply: [{ $subtract: [8, "$workingHours"] }, 60] }
+                    }
+                }
+            }
+        ]);
+        const totalFineMins = Math.round(fineResult[0]?.totalFineMins || 0);
+        const fineHours = `${Math.floor(totalFineMins / 60)}h ${totalFineMins % 60}m`;
+
         const deactivatedCount = await User.countDocuments({ role: { $ne: "admin" }, isActive: false });
-        const deactivated = deactivatedCount;
-        const dailyWorkEntries = presentToday + punchedOut; // Approximation for now
 
         res.status(200).json({
             success: true,
@@ -66,14 +143,14 @@ exports.getAdminStats = async (req, res) => {
                 present: presentToday,
                 absent: absentToday,
                 halfDay,
-                punchedIn: presentToday,
+                punchedIn,
                 punchedOut,
-                notMarked: absentToday,
+                notMarked,
                 onLeave,
                 upcomingLeaves,
                 overtimeHours,
                 fineHours,
-                deactivated,
+                deactivated: deactivatedCount,
                 dailyWorkEntries,
                 pendingApprovals
             }
