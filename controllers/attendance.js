@@ -421,33 +421,56 @@ exports.getAllAttendance = async (req, res) => {
       },
 
       // Stage 5: Project to extract IN and OUT from allRecords
+      // Priority: latest non-Rejected record → falls back to latest of any status.
+      // This ensures that after a rejection + re-punch, the NEW Pending record is shown,
+      // not the old Rejected record (which was at index 0 in ascending deviceTime order).
       {
         $project: {
           userId: "$_id.userId",
           dateStr: "$_id.dateStr",
           inRecord: {
-            $arrayElemAt: [
-              {
-                $filter: {
-                  input: "$allRecords",
-                  as: "record",
-                  cond: { $eq: ["$$record.attendanceType", "IN"] }
+            $let: {
+              vars: {
+                allIns: {
+                  $filter: { input: "$allRecords", as: "r", cond: { $eq: ["$$r.attendanceType", "IN"] } }
                 }
               },
-              0
-            ]
+              in: {
+                $ifNull: [
+                  // Prefer: last (most recent) non-Rejected IN
+                  {
+                    $arrayElemAt: [
+                      { $filter: { input: "$$allIns", as: "r", cond: { $ne: ["$$r.approvalStatus", "Rejected"] } } },
+                      -1
+                    ]
+                  },
+                  // Fallback: last (most recent) IN of any status
+                  { $arrayElemAt: ["$$allIns", -1] }
+                ]
+              }
+            }
           },
           outRecord: {
-            $arrayElemAt: [
-              {
-                $filter: {
-                  input: "$allRecords",
-                  as: "record",
-                  cond: { $eq: ["$$record.attendanceType", "OUT"] }
+            $let: {
+              vars: {
+                allOuts: {
+                  $filter: { input: "$allRecords", as: "r", cond: { $eq: ["$$r.attendanceType", "OUT"] } }
                 }
               },
-              0
-            ]
+              in: {
+                $ifNull: [
+                  // Prefer: last (most recent) non-Rejected OUT
+                  {
+                    $arrayElemAt: [
+                      { $filter: { input: "$$allOuts", as: "r", cond: { $ne: ["$$r.approvalStatus", "Rejected"] } } },
+                      -1
+                    ]
+                  },
+                  // Fallback: last (most recent) OUT of any status
+                  { $arrayElemAt: ["$$allOuts", -1] }
+                ]
+              }
+            }
           }
         }
       },
@@ -804,20 +827,41 @@ exports.getMonthlyAttendanceUser = async (req, res) => {
       {
         $group: {
           _id: "$dateStr",
-          inRecord: {
-            $first: { $cond: [{ $eq: ["$attendanceType", "IN"] }, "$$ROOT", null] }
-          },
-          outRecord: {
-            $first: { $cond: [{ $eq: ["$attendanceType", "OUT"] }, "$$ROOT", null] }
-          }
+          allRecords: { $push: "$$ROOT" }
         }
       },
       {
         $project: {
           _id: 0,
           date: "$_id",
-          in: "$inRecord",
-          out: "$outRecord"
+          // Prefer latest non-Rejected IN; fallback to latest IN of any status
+          in: {
+            $let: {
+              vars: {
+                allIns: { $filter: { input: "$allRecords", as: "r", cond: { $eq: ["$$r.attendanceType", "IN"] } } }
+              },
+              in: {
+                $ifNull: [
+                  { $arrayElemAt: [{ $filter: { input: "$$allIns", as: "r", cond: { $ne: ["$$r.approvalStatus", "Rejected"] } } }, -1] },
+                  { $arrayElemAt: ["$$allIns", -1] }
+                ]
+              }
+            }
+          },
+          // Prefer latest non-Rejected OUT; fallback to latest OUT of any status
+          out: {
+            $let: {
+              vars: {
+                allOuts: { $filter: { input: "$allRecords", as: "r", cond: { $eq: ["$$r.attendanceType", "OUT"] } } }
+              },
+              in: {
+                $ifNull: [
+                  { $arrayElemAt: [{ $filter: { input: "$$allOuts", as: "r", cond: { $ne: ["$$r.approvalStatus", "Rejected"] } } }, -1] },
+                  { $arrayElemAt: ["$$allOuts", -1] }
+                ]
+              }
+            }
+          }
         }
       },
       { $sort: { date: 1 } }
