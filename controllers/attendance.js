@@ -197,10 +197,12 @@ exports.markAttendance = async (req, res) => {
     // Duplicate Check for same day (Only for IN)
     // We do this BEFORE time restriction, because if they already marked IN, 
     // we want to switch them to OUT (which is allowed after 12:30 PM).
+    // NOTE: Rejected records are excluded — a rejected punch lets the user try again.
     if (attendanceType === "IN") {
       const alreadyMarkedIn = await Attendance.findOne({
         userId,
         attendanceType: "IN",
+        approvalStatus: { $ne: "Rejected" }, // Rejected INs don't block a new punch
         createdAt: {
           $gte: startOfDay,
           $lte: endOfDay,
@@ -217,9 +219,11 @@ exports.markAttendance = async (req, res) => {
 
     // Check if OUT before IN
     if (attendanceType === "OUT") {
+      // Approved or Pending IN record must exist — Rejected IN does not count
       const inMarked = await Attendance.findOne({
         userId,
         attendanceType: "IN",
+        approvalStatus: { $ne: "Rejected" }, // Rejected IN = as if never punched
         createdAt: {
           $gte: startOfDay,
           $lte: endOfDay,
@@ -230,9 +234,11 @@ exports.markAttendance = async (req, res) => {
         return res.status(400).json({ message: "You must mark IN before OUT" });
       }
 
+      // Already checked OUT? Only block if that OUT is NOT Rejected
       const alreadyMarkedOut = await Attendance.findOne({
         userId,
         attendanceType: "OUT",
+        approvalStatus: { $ne: "Rejected" }, // Rejected OUT = user may punch out again
         createdAt: {
           $gte: startOfDay,
           $lte: endOfDay,
@@ -259,9 +265,11 @@ exports.markAttendance = async (req, res) => {
     let status = "Present";
 
     if (attendanceType === "OUT") {
+      // Find the most recent non-rejected IN record to calculate working hours
       const inRecord = await Attendance.findOne({
         userId,
         attendanceType: "IN",
+        approvalStatus: { $ne: "Rejected" },
         createdAt: {
           $gte: startOfDay,
           $lte: endOfDay,
@@ -271,13 +279,6 @@ exports.markAttendance = async (req, res) => {
       if (inRecord) {
         const ms = serverTime - new Date(inRecord.deviceTime);
         workingHours = ms / (1000 * 60 * 60); // Hours
-
-        // ---------------------------------------------------------
-        // 4-HOUR RESTRICTION CHECK
-        // ---------------------------------------------------------
-        // ---------------------------------------------------------
-        // REMOVED 4-HOUR RESTRICTION (Allowed with Absent status)
-        // ---------------------------------------------------------
 
         if (workingHours >= 8) {
           status = "Full Day";

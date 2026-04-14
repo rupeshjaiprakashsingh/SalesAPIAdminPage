@@ -662,8 +662,26 @@ export default function AttendanceList() {
           <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Overtime Hours <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>0h 0m</div></div>
           <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Fine hours <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>0h 0m</div></div>
           <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Leave <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>0</div></div>
-          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Punched In <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statInCount}</div></div>
-          <div><div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Punched Out <i className="ri-information-line"></i></div><div style={{ fontSize: '18px', fontWeight: 700 }}>{statOutCount}</div></div>
+          <div>
+            <div
+              onClick={() => navigate(`/dashboard/attendance/approval/punch-in?date=${startDate}`)}
+              style={{ fontSize: '12px', color: '#2563eb', marginBottom: '8px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'underline', textDecorationStyle: 'dotted' }}
+              title="View Punch-In Approval Page"
+            >
+              <i className="ri-login-box-line" style={{ fontSize: '13px' }}></i> Punched In
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 700 }}>{statInCount}</div>
+          </div>
+          <div>
+            <div
+              onClick={() => navigate(`/dashboard/attendance/approval/punch-out?date=${startDate}`)}
+              style={{ fontSize: '12px', color: '#be185d', marginBottom: '8px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'underline', textDecorationStyle: 'dotted' }}
+              title="View Punch-Out Approval Page"
+            >
+              <i className="ri-logout-box-line" style={{ fontSize: '13px' }}></i> Punched Out
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 700 }}>{statOutCount}</div>
+          </div>
         </div>
         
         {/* Action Buttons */}

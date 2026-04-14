@@ -15,3 +15,5 @@ export { default as AddCustomer } from "./AddCustomer";
 export { default as StaffProfile } from "./StaffProfile";
 export { default as Settings } from "./Settings";
 export { default as AttendanceApproval } from "./AttendanceApproval";
+export { default as AttendancePunchInApproval } from "./AttendancePunchInApproval";
+export { default as AttendancePunchOutApproval } from "./AttendancePunchOutApproval";

@@ -1,5 +1,5 @@
 import { RouterProvider, createBrowserRouter } from "react-router-dom";
-import { Dashboard, HomeLayout, Landing, Login, Logout, Register, UserManagement, LiveTracking, TimelineReport, CalendarReport, MusterRoll, GeoDashboard, CustomersDashboard, AddCustomer, StaffProfile, Settings, AttendanceApproval } from "./pages";
+import { Dashboard, HomeLayout, Landing, Login, Logout, Register, UserManagement, LiveTracking, TimelineReport, CalendarReport, MusterRoll, GeoDashboard, CustomersDashboard, AddCustomer, StaffProfile, Settings, AttendanceApproval, AttendancePunchInApproval, AttendancePunchOutApproval } from "./pages";
 import { ToastContainer } from "react-toastify";
 import HomeDashboard from "./pages/HomeDashboard";
 import MarkAttendance from "./pages/MarkAttendance";
@@ -22,6 +22,8 @@ const router = createBrowserRouter([
           { index: true, element: <HomeDashboard /> },
           { path: "attendance", element: <MarkAttendance /> },
           { path: "attendance/approval", element: <AttendanceApproval /> },
+          { path: "attendance/approval/punch-in", element: <AttendancePunchInApproval /> },
+          { path: "attendance/approval/punch-out", element: <AttendancePunchOutApproval /> },
           { path: "attendance-list", element: <AttendanceList /> },
           { path: "attendance/:id", element: <GetAttendanceByIdDetails /> },
           { path: "profile", element: <Profile /> },

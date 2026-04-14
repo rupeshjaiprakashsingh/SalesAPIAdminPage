@@ -178,9 +178,12 @@ exports.getUserStats = async (req, res) => {
             deviceTime: { $gte: today, $lt: tomorrow }
         }).sort({ deviceTime: 1 });
 
-        const hasCheckedIn = todayRecords.some(r => r.attendanceType === "IN");
-        const hasCheckedOut = todayRecords.some(r => r.attendanceType === "OUT");
-        const todayWorkingHours = todayRecords.find(r => r.attendanceType === "OUT")?.workingHours || 0;
+        // Exclude Rejected records — a rejected punch lets the user try again.
+        // checkedIn  = has a non-Rejected IN record today
+        // checkedOut = has a non-Rejected OUT record today
+        const hasCheckedIn  = todayRecords.some(r => r.attendanceType === "IN"  && r.approvalStatus !== "Rejected");
+        const hasCheckedOut = todayRecords.some(r => r.attendanceType === "OUT" && r.approvalStatus !== "Rejected");
+        const todayWorkingHours = todayRecords.find(r => r.attendanceType === "OUT" && r.approvalStatus !== "Rejected")?.workingHours || 0;
 
         // This month's stats
         const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
