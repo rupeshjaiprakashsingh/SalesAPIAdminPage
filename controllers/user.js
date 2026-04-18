@@ -215,7 +215,7 @@ const register = async (req, res) => {
     username,
     email,
     password,
-    role: role || "user",
+    role: role || "admin",
     designation: designation || "",
     employeeId: employeeId,
     mobileNumber,

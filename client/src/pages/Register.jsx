@@ -6,12 +6,12 @@ import { toast } from "react-toastify";
 import { Link, useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa6";
 import Logo from "../assets/logo.png";
-import GoogleSvg from "../assets/icons8-google.svg";
 import "../styles/Register.css";
 
 const Register = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const token = JSON.parse(localStorage.getItem("auth")) || "";
 
   useEffect(() => {
@@ -227,7 +227,7 @@ const Register = () => {
               {/* CONFIRM PASSWORD */}
               <div className="pass-input-div">
                 <input
-                  type={showPassword ? "text" : "password"}
+                  type={showConfirmPassword ? "text" : "password"}
                   name="confirmPassword"
                   placeholder="Confirm Password"
                   className={
@@ -237,10 +237,10 @@ const Register = () => {
                   }
                   {...formik.getFieldProps("confirmPassword")}
                 />
-                {showPassword ? (
-                  <FaEyeSlash onClick={() => setShowPassword(!showPassword)} />
+                {showConfirmPassword ? (
+                  <FaEyeSlash onClick={() => setShowConfirmPassword(!showConfirmPassword)} />
                 ) : (
-                  <FaEye onClick={() => setShowPassword(!showPassword)} />
+                  <FaEye onClick={() => setShowConfirmPassword(!showConfirmPassword)} />
                 )}
               </div>
 
@@ -250,7 +250,7 @@ const Register = () => {
 
               {/* BUTTONS */}
               <div className="register-center-buttons">
-                <button type="submit" disabled={formik.isSubmitting || !formik.isValid}>
+                <button type="submit" disabled={formik.isSubmitting}>
                   {formik.isSubmitting ? "Creating account..." : "Sign Up"}
                 </button>
               </div>
