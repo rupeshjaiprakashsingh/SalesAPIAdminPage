@@ -1,0 +1,26 @@
+# =====================================================
+# robots.txt — SalesAdmin | ScanServices
+# https://ss.scanservices.in/robots.txt
+# =====================================================
+
+User-agent: *
+# Allow public-facing pages
+Allow: /
+Allow: /login
+Allow: /register
+
+# Block private dashboard routes — no value indexing these
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /api/
+Disallow: /logout
+
+# Block common crawler traps
+Disallow: /node_modules/
+Disallow: /*.json$
+
+# Sitemap location
+Sitemap: https://ss.scanservices.in/sitemap.xml
+
+# Crawl delay (be respectful to the server)
+Crawl-delay: 5

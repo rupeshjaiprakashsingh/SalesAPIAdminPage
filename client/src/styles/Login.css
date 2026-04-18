@@ -3,10 +3,17 @@
    Premium Split-Screen Design
    ======================================== */
 
-.login-main,
-.register-main {
+.login-main {
   display: flex;
   min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Register needs a fixed height so its right panel can scroll independently */
+.register-main {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
   font-family: 'Inter', sans-serif;
 }
 
@@ -139,10 +146,45 @@
   background: var(--surface);
 }
 
+/* Register right panel: scrollable so the tall form is never cut off */
+.register-right {
+  align-items: flex-start;
+  overflow-y: auto;
+  padding-top: 2.5rem;
+  padding-bottom: 2.5rem;
+  /* Custom scrollbar — thin and subtle */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-dark) transparent;
+}
+
+.register-right::-webkit-scrollbar {
+  width: 4px;
+}
+
+.register-right::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.register-right::-webkit-scrollbar-thumb {
+  background: var(--border-dark);
+  border-radius: 4px;
+}
+
+/* Left panel: fixed height, doesn't scroll */
+.register-left {
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
 .login-right-container,
 .register-right-container {
   width: 100%;
   max-width: 420px;
+}
+
+/* For register, center the container horizontally in the scrollable area */
+.register-right-container {
+  margin: 0 auto;
 }
 
 /* Logo area */
@@ -407,9 +449,20 @@ button[type='submit'],
     display: none;
   }
 
+  /* Register: full width, scrollable page */
+  .register-main {
+    height: auto;
+    overflow: visible;
+  }
+
   .login-right,
   .register-right {
     flex: 1;
+    /* On mobile, restore natural page scroll */
+    overflow-y: visible;
+    align-items: flex-start;
+    padding-top: 3rem;
+    padding-bottom: 3rem;
   }
 }
 
@@ -417,17 +470,23 @@ button[type='submit'],
   .login-right,
   .register-right {
     padding: 1.5rem;
-    align-items: flex-start;
-    padding-top: 3rem;
+    padding-top: 2.5rem;
+    padding-bottom: 2.5rem;
   }
 
   .login-right-container,
   .register-right-container {
     max-width: 100%;
+    width: 100%;
   }
 
   .login-center h2,
   .register-center h2 {
     font-size: 1.5rem;
+  }
+
+  /* Reduce gap in form on small screens */
+  .register-right form {
+    gap: 1rem;
   }
 }

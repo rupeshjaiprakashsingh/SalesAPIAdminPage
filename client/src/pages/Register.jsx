@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { Link, useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa6";
 import Logo from "../assets/logo.png";
+import useSEO from "../seo/useSEO";
 import "../styles/Register.css";
 
 const Register = () => {
@@ -13,6 +14,13 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const token = JSON.parse(localStorage.getItem("auth")) || "";
+
+  useSEO({
+    title: "Register — Create Your Free SalesAdmin Account",
+    description:
+      "Create your free SalesAdmin account today. Start managing your sales team with GPS attendance tracking, live monitoring, and automated reports. No credit card required.",
+    canonicalPath: "/register",
+  });
 
   useEffect(() => {
     if (token !== "") {

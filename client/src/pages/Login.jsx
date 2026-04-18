@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { Link, useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa6";
 import Logo from "../assets/logo.png";
+import useSEO from "../seo/useSEO";
 import "../styles/Login.css";
 
 const Login = () => {
@@ -13,6 +14,13 @@ const Login = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const token = JSON.parse(localStorage.getItem("auth")) || "";
   const navigate = useNavigate();
+
+  useSEO({
+    title: "Login — Sign In to Your Dashboard",
+    description:
+      "Sign in to SalesAdmin to manage your field sales team, view live GPS tracking, approve attendance, and access detailed performance reports.",
+    canonicalPath: "/login",
+  });
 
   useEffect(() => {
     if (token !== "") {

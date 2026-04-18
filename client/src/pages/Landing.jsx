@@ -1,8 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import useSEO from '../seo/useSEO';
 import "../styles/Landing.css";
 
 const Landing = () => {
+  useSEO({
+    title: "Sales Tracking & GPS Attendance Management for Field Teams",
+    description:
+      "SalesAdmin by ScanServices — The #1 field sales tracking and GPS attendance system for Indian businesses. Monitor your team live, automate attendance, and generate reports instantly. Start free today.",
+    canonicalPath: "/",
+  });
+
   return (
     <div className="landing-container">
       {/* Navigation */}
@@ -26,20 +34,22 @@ const Landing = () => {
       </nav>
 
       {/* Hero Section */}
-      <header className="hero-section">
+      <header className="hero-section" aria-label="SalesAdmin — Sales Tracking & GPS Attendance Management">
         <div className="hero-content">
           <div className="hero-badge">
             <span className="hero-badge-dot"></span>
-            Real-time Staff Tracking Platform
+            Real-time Field Sales Tracking Platform
           </div>
 
           <h1 className="hero-title">
-            The Smarter Way to<br />
-            Manage <span className="highlight">Your Sales Team</span>
+            GPS Attendance &amp; Sales 
+            <span className="highlight">Team Tracking Software</span>
           </h1>
 
           <p className="hero-subtitle">
-            Powerful attendance tracking, live GPS monitoring, and in-depth reports — all in one professional platform built for modern sales teams.
+            Powerful GPS-tagged attendance, live location monitoring, and advanced reports
+            — all in one platform built for Indian field sales teams.
+            Trusted by <strong>500+ businesses</strong> across India.
           </p>
 
           <div className="hero-cta">
@@ -76,12 +86,15 @@ const Landing = () => {
       </div>
 
       {/* Features Section */}
-      <section className="features-section">
+      <section className="features-section" aria-labelledby="features-heading">
         <div className="section-header">
           <span className="section-eyebrow">Why SalesAdmin?</span>
-          <h2 className="section-title">Everything You Need to<br />Run Your Team Efficiently</h2>
+          <h2 id="features-heading" className="section-title">
+            Complete Field Sales Tracking &amp;<br />Attendance Management System
+          </h2>
           <p className="section-subtitle">
-            From attendance to live tracking — all the tools your managers need in a single, beautiful dashboard.
+            From GPS attendance to live staff tracking — every tool your managers need
+            to run a productive, accountable field sales team.
           </p>
         </div>
 
@@ -138,10 +151,18 @@ const Landing = () => {
 
       {/* Footer */}
       <footer className="landing-footer">
+        <address style={{fontStyle:'normal'}}>
+          <strong>ScanServices</strong> — Sales Tracking &amp; Attendance Management Software
+        </address>
         <p>
-          &copy; {new Date().getFullYear()} <span className="footer-brand">SalesAdmin</span>. 
-          Professional Staff Tracking & Management. All rights reserved.
+          &copy; {new Date().getFullYear()}{" "}
+          <span className="footer-brand">SalesAdmin by ScanServices</span>.
+          {" "}GPS attendance, field sales tracking &amp; team management. All rights reserved.
         </p>
+        <nav aria-label="Footer links" style={{marginTop:'0.5rem',fontSize:'0.8rem'}}>
+          <Link to="/login" style={{color:'inherit',marginRight:'1rem'}}>Sign In</Link>
+          <Link to="/register" style={{color:'inherit'}}>Get Started Free</Link>
+        </nav>
       </footer>
     </div>
   );
